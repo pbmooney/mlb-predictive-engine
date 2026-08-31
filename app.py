@@ -828,11 +828,12 @@ with tab3:
     st.write("Simulate matchups by cross-referencing pitch arsenals against specific teams or individual hitters.")
     
 # Internal sub-navigation
-    sim_team_tab, sim_batter_tab, sim_team_matrix_tab, playbook_tab = st.tabs([
+    sim_team_tab, sim_batter_tab, sim_team_matrix_tab, playbook_tab, edge_scanner_tab = st.tabs([
         "Pitcher vs. Team (Historical)", 
         "Pitcher vs. Batter (Arsenal Matrix)", 
         "Pitcher vs. Team (Arsenal Matrix)",
-        "📖 Betting Playbook"
+        "📖 Betting Playbook",
+        "🚨 Edge Scanner"
     ])
     
     from datetime import datetime, timedelta
@@ -1145,3 +1146,109 @@ with tab3:
         * **Rolling Form vs. Stale Season Totals:** Using a customizable rolling window allows you to capture active mechanical tweaks, pitch velocity jumps, or offensive lineup slumps that full-season averages dilute.
         * **First 5 Innings (F5) Betting:** Bullpens introduce unpredictable variance. The Global Arsenal Matrix models the starting pitcher's interaction with the order through 15–20 outs, making it an ideal engine for **First 5 Innings (F5) Moneyline** and **F5 Under/Over** wagers.
         """)
+
+# -------------------------------------------------------------
+    # SUB-TAB 5: AUTOMATED SLATE EDGE SCANNER
+    # -------------------------------------------------------------
+    with edge_scanner_tab:
+        st.markdown("#### 🚨 Targeted Slate Edge Scanner")
+        st.write("Input up to 3 matchups you are eyeing today. The engine will run the Playbook Decision Matrix and flag quantitative betting edges.")
+        
+        # Slate Input UI
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown("**Matchup 1**")
+            s1_p = st.text_input("Pitcher Last Name", value="Skubal", key="s1_p").strip().lower()
+            s1_t = st.text_input("Opponent (e.g. NYY)", value="NYY", key="s1_t").strip().upper()
+        with col2:
+            st.markdown("**Matchup 2**")
+            s2_p = st.text_input("Pitcher Last Name", value="Skenes", key="s2_p").strip().lower()
+            s2_t = st.text_input("Opponent", value="CHC", key="s2_t").strip().upper()
+        with col3:
+            st.markdown("**Matchup 3 (Optional)**")
+            s3_p = st.text_input("Pitcher Last Name", value="", key="s3_p").strip().lower()
+            s3_t = st.text_input("Opponent", value="", key="s3_t").strip().upper()
+            
+        if st.button("Scan Slate for Edges", key="btn_scan"):
+            import pybaseball as pyb
+            matchups = []
+            if s1_p and s1_t: matchups.append((s1_p, s1_t))
+            if s2_p and s2_t: matchups.append((s2_p, s2_t))
+            if s3_p and s3_t: matchups.append((s3_p, s3_t))
+            
+            if not matchups:
+                st.warning("Please enter at least one matchup.")
+            else:
+                with st.spinner("Downloading rolling 30-day MLB data and running Playbook Matrix..."):
+                    try:
+                        # Pull 30 days of global data once to save time
+                        start_dt = (datetime.today() - timedelta(days=30)).strftime('%Y-%m-%d')
+                        end_dt = datetime.today().strftime('%Y-%m-%d')
+                        sc_data = pyb.statcast(start_dt=start_dt, end_dt=end_dt)
+                        sc_data['batting_team'] = np.where(sc_data['inning_topbot'] == 'Bot', sc_data['home_team'], sc_data['away_team'])
+                        
+                        st.markdown("---")
+                        
+                        for p_last, team in matchups:
+                            st.markdown(f"### 🔎 Scanning: {p_last.title()} vs. {team}")
+                            meta = playerid_lookup(p_last)
+                            if meta.empty:
+                                st.error(f"Could not find pitcher: {p_last}")
+                                continue
+                                
+                            p_id = meta['key_mlbam'].values[0]
+                            p_first = meta['name_first'].values[0]
+                            p_pitches = statcast_pitcher(start_dt, end_dt, p_id)
+                            
+                            if p_pitches.empty:
+                                st.warning(f"No recent data for {p_first.title()} {p_last.title()}.")
+                                continue
+                                
+                            # Pitcher Arsenal
+                            p_usage = p_pitches.groupby('pitch_name').agg(Pitches=('pitch_type', 'count')).reset_index()
+                            p_usage['Usage %'] = (p_usage['Pitches'] / p_usage['Pitches'].sum() * 100)
+                            primary_pitch = p_usage.sort_values(by='Usage %', ascending=False).iloc[0]
+                            
+                            # Team Global Performance
+                            t_pitches = sc_data[sc_data['batting_team'] == team].copy()
+                            t_pitches['is_swing'] = t_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'])
+                            t_pitches['is_whiff'] = t_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
+                            t_pitches['is_hard_hit'] = t_pitches['launch_speed'] >= 95
+                            
+                            t_perf = t_pitches.groupby('pitch_name').agg(
+                                Swings=('is_swing', 'sum'),
+                                Whiffs=('is_whiff', 'sum'),
+                                BBE=('launch_speed', 'count'),
+                                Hard_Hits=('is_hard_hit', 'sum')
+                            ).reset_index()
+                            
+                            t_perf['Team Whiff %'] = (t_perf['Whiffs'] / t_perf['Swings'] * 100).fillna(0)
+                            t_perf['Team Hard Hit %'] = (t_perf['Hard_Hits'] / t_perf['BBE'] * 100).fillna(0)
+                            
+                            # Merge for logic
+                            matrix = p_usage.merge(t_perf, on='pitch_name', how='inner')
+                            if matrix.empty:
+                                st.write("Insufficient overlap data.")
+                                continue
+                                
+                            # EVALUATE DECISION MATRIX RULES
+                            edge_found = False
+                            primary = matrix.sort_values(by='Usage %', ascending=False).iloc[0]
+                            
+                            # Rule 1: Strikeout Mismatch (Usage > 30% AND Team Whiff > 30%)
+                            if primary['Usage %'] > 30 and primary['Team Whiff %'] > 30:
+                                st.success(f"🚨 **STRIKEOUT EDGE DETECTED: {p_last.title()} OVER Ks**")
+                                st.write(f"*{p_first.title()} {p_last.title()} throws his {primary['pitch_name']} {primary['Usage %']:.1f}% of the time. The {team} have a massive {primary['Team Whiff %']:.1f}% Whiff Rate against that pitch globally over the last 30 days.*")
+                                edge_found = True
+                                
+                            # Rule 2: Fade Pitcher Mismatch (Usage > 30% AND Team Hard Hit > 40%)
+                            if primary['Usage %'] > 30 and primary['Team Hard Hit %'] > 40:
+                                st.error(f"🚨 **FADE PITCHER DETECTED: {team} TEAM TOTAL OVER**")
+                                st.write(f"*{team} crushes the {primary['pitch_name']} with a {primary['Team Hard Hit %']:.1f}% Hard Hit rate. {p_last.title()} relies on this pitch {primary['Usage %']:.1f}% of the time, creating a dangerous structural mismatch.*")
+                                edge_found = True
+                                
+                            if not edge_found:
+                                st.info(f"⚖️ **No Structural Edge Found.** {team} hits {p_last.title()}'s primary pitches at a league-average rate. Skip derivative props and look for a better game.")
+                                
+                    except Exception as e:
+                        st.error(f"Scanner Error: {e}")
