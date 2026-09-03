@@ -828,7 +828,7 @@ with tab3:
     st.write("Simulate matchups by cross-referencing pitch arsenals against specific teams or individual hitters.")
     
 # Internal sub-navigation
-    sim_team_tab, sim_batter_tab, sim_team_matrix_tab, playbook_tab, edge_scanner_tab = st.tabs([
+    sim_team_tab, sim_batter_tab, sim_team_matrix_tab, edge_scanner_tab = st.tabs([
         "Pitcher vs. Team (Historical)", 
         "Pitcher vs. Batter (Arsenal Matrix)", 
         "Pitcher vs. Team (Arsenal Matrix)",
