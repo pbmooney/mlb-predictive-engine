@@ -839,108 +839,116 @@ with tab3:
     from pybaseball import playerid_lookup, statcast_pitcher, statcast_batter
     import numpy as np
 
-    # -------------------------------------------------------------
-    # SUB-TAB 1: PITCHER VS. TEAM (HISTORICAL)
+# -------------------------------------------------------------
+    # SUB-TAB 1: PITCHER VS. TEAM (HISTORICAL BOX SCORE & RATE CONTEXT)
     # -------------------------------------------------------------
     with sim_team_tab:
-        st.markdown("#### 🏢 Pitcher vs. Team Matchup")
+        st.markdown("#### 📊 Pitcher vs. Team (Historical Context)")
+        st.write("Analyze a pitcher's multi-year performance, out-conversion, and strikeout rates against a specific opponent.")
         
-        c1, c2, c3 = st.columns(3)
-        p_first = c1.text_input("Pitcher First Name", value="Tarik", key="pvt_first").strip().lower()
-        p_last = c2.text_input("Pitcher Last Name", value="Skubal", key="pvt_last").strip().lower()
+        import pybaseball as pyb
+        from datetime import datetime, timedelta
+        import numpy as np
         
-        teams = sorted(['NYY', 'BAL', 'TBR', 'BOS', 'TOR', 'CLE', 'KCR', 'MIN', 'DET', 'CHW', 'HOU', 'SEA', 'TEX', 'OAK', 'LAA', 'PHI', 'ATL', 'NYM', 'WSN', 'MIA', 'MIL', 'STL', 'CHC', 'PIT', 'CIN', 'LAD', 'SDP', 'ARI', 'SFG', 'COL'])
-        target_team = c3.selectbox("Opposing Team", teams, key="pvt_team")
+        pyb.cache.enable()
         
-        if st.button("Run Team Simulation", key="btn_pvt"):
-            with st.spinner(f"Pulling 2-year history for {p_first.title()} {p_last.title()} vs. {target_team}..."):
-                try:
-                    meta = playerid_lookup(p_last, p_first)
-                    if not meta.empty:
-                        p_id = meta['key_mlbam'].values[0]
-                        start_dt = (datetime.today() - timedelta(days=730)).strftime('%Y-%m-%d')
-                        end_dt = datetime.today().strftime('%Y-%m-%d')
+        mlb_teams = [
+            "ARI", "ATL", "BAL", "BOS", "CHC", "CIN", "CLE", "COL", "CWS", 
+            "DET", "HOU", "KC", "LAA", "LAD", "MIA", "MIL", "MIN", "NYM", 
+            "NYY", "OAK", "PHI", "PIT", "SD", "SEA", "SF", "STL", "TB", 
+            "TEX", "TOR", "WSH"
+        ]
+        
+        col_hp, col_ht, col_hd = st.columns(3)
+        with col_hp:
+            hist_pitcher_full = st.text_input("Pitcher Full Name", value="Tarik Skubal", key="hist_p").strip()
+        with col_ht:
+            hist_team = st.selectbox("Opposing Team", mlb_teams, index=mlb_teams.index("CWS") if "CWS" in mlb_teams else 0, key="hist_t")
+        with col_hd:
+            hist_years = st.selectbox("Historical Window", ["1 Year", "2 Years", "3 Years"], index=1, key="hist_y")
+            
+        if st.button("Run Historical Matchup", key="btn_hist"):
+            if hist_pitcher_full:
+                with st.spinner("Querying multi-year head-to-year Statcast logs..."):
+                    try:
+                        # Calculate date range based on selection
+                        years_back = 1 if hist_years == "1 Year" else (2 if hist_years == "2 Years" else 3)
+                        start_date = (datetime.today() - timedelta(days=years_back * 365)).strftime('%Y-%m-%d')
+                        end_date = datetime.today().strftime('%Y-%m-%d')
                         
-                        p_data = statcast_pitcher(start_dt, end_dt, p_id)
-                        
-                        if not p_data.empty:
-                            p_data['batting_team'] = np.where(p_data['inning_topbot'] == 'Bot', p_data['home_team'], p_data['away_team'])
-                            matchup_data = p_data[p_data['batting_team'] == target_team].copy()
-                            
-                            if not matchup_data.empty:
-                                at_bats = matchup_data.dropna(subset=['events']).copy()
-                                
-                                pa_events = ['strikeout', 'strikeout_double_play', 'walk', 'single', 'double', 'triple', 'home_run', 'field_out', 'grounded_into_dp', 'force_out', 'fielders_choice', 'field_error', 'hit_by_pitch', 'sac_fly', 'sac_bunt']
-                                pa_df = matchup_data[matchup_data['events'].isin(pa_events)].copy()
-                                total_pa = len(pa_df)
-                                
-                                hits = at_bats['events'].isin(['single', 'double', 'triple', 'home_run']).sum()
-                                hrs = (at_bats['events'] == 'home_run').sum()
-                                ks = at_bats['events'].isin(['strikeout', 'strikeout_double_play']).sum()
-                                official_abs = (~at_bats['events'].isin(['walk', 'hit_by_pitch', 'sac_fly', 'sac_bunt'])).sum()
-                                ba = (hits / official_abs) if official_abs > 0 else 0.0
-                                
-                                k_pct = (ks / total_pa * 100) if total_pa > 0 else 0.0
-                                
-                                one_out_events = ['strikeout', 'field_out', 'force_out', 'fielders_choice_out', 'sac_fly', 'sac_bunt', 'other_out', 'caught_stealing_2b', 'caught_stealing_3b', 'caught_stealing_home', 'pickoff_1b', 'pickoff_2b', 'pickoff_3b']
-                                two_out_events = ['grounded_into_dp', 'strikeout_double_play', 'double_play', 'sac_fly_double_play']
-                                three_out_events = ['triple_play']
-                                
-                                total_outs = (
-                                    matchup_data['events'].isin(one_out_events).sum() +
-                                    (matchup_data['events'].isin(two_out_events).sum() * 2) +
-                                    (matchup_data['events'].isin(three_out_events).sum() * 3)
-                                )
-                                ip_full = total_outs // 3
-                                ip_remainder = total_outs % 3
-                                ip_formatted = f"{ip_full}.{ip_remainder}"
-                                
-                                st.markdown("---")
-                                st.markdown(f"##### 📊 Historical Box Score: vs {target_team} (Last 2 Years)")
-                                
-                                row1_c1, row1_c2, row1_c3 = st.columns(3)
-                                row1_c1.metric("Innings Pitched (IP)", ip_formatted)
-                                row1_c2.metric("Strikeout Rate (K%)", f"{k_pct:.1f}%")
-                                row1_c3.metric("Strikeouts (Total)", f"{ks}")
-                                
-                                row2_c1, row2_c2, row2_c3 = st.columns(3)
-                                row2_c1.metric("Hits / ABs", f"{hits} / {official_abs}")
-                                row2_c2.metric("Opponent BA", f".{int(ba * 1000):03d}")
-                                row2_c3.metric("Home Runs Allowed", f"{hrs}")
-                                
-                                st.markdown("<br>", unsafe_allow_html=True)
-                                st.markdown(f"##### 🔬 Pitch Arsenal Breakdown vs {target_team}")
-                                
-                                matchup_data['is_swing'] = matchup_data['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'])
-                                matchup_data['is_whiff'] = matchup_data['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
-                                matchup_data['is_hard_hit'] = matchup_data['launch_speed'] >= 95
-                                
-                                arsenal = matchup_data.groupby('pitch_name').agg(
-                                    Pitches=('pitch_type', 'count'),
-                                    Avg_Velo=('release_speed', 'mean'),
-                                    Swings=('is_swing', 'sum'),
-                                    Whiffs=('is_whiff', 'sum'),
-                                    BBE=('launch_speed', 'count'),
-                                    Hard_Hits=('is_hard_hit', 'sum')
-                                ).reset_index()
-                                
-                                arsenal['Usage %'] = (arsenal['Pitches'] / arsenal['Pitches'].sum() * 100).map("{:.1f}%".format)
-                                arsenal['Whiff %'] = (arsenal['Whiffs'] / arsenal['Swings'] * 100).fillna(0).map("{:.1f}%".format)
-                                arsenal['Hard Hit %'] = (arsenal['Hard_Hits'] / arsenal['BBE'] * 100).fillna(0).map("{:.1f}%".format)
-                                arsenal['Avg Velo'] = arsenal['Avg_Velo'].map("{:.1f} mph".format)
-                                
-                                display_arsenal = arsenal[['pitch_name', 'Usage %', 'Avg Velo', 'Pitches', 'Whiff %', 'Hard Hit %']].sort_values(by='Pitches', ascending=False)
-                                display_arsenal = display_arsenal.rename(columns={'pitch_name': 'Pitch Type'})
-                                
-                                st.dataframe(display_arsenal, hide_index=True, use_container_width=True)
-                            else:
-                                st.warning(f"No matchups found against {target_team} in the last 2 years.")
+                        # Parse names
+                        name_parts = hist_pitcher_full.split()
+                        if len(name_parts) < 2:
+                            st.error("Please enter both first and last name.")
                         else:
-                            st.warning("No pitch data found for this pitcher.")
-                    else:
-                        st.error("Pitcher not found. Check spelling.")
-                except Exception as e:
-                    st.error(f"Error: {e}")
+                            p_first_in, p_last_in = name_parts[0], name_parts[-1]
+                            meta = pyb.playerid_lookup(p_last_in, p_first_in)
+                            if meta.empty:
+                                meta = pyb.playerid_lookup(p_last_in)
+                                
+                            if meta.empty:
+                                st.error(f"Pitcher not found: {hist_pitcher_full}")
+                            else:
+                                p_id = meta['key_mlbam'].values[0]
+                                p_first = meta['name_first'].values[0].title()
+                                p_last = meta['name_last'].values[0].title()
+                                
+                                # Fetch multi-year pitcher data
+                                p_data = pyb.statcast_pitcher(start_date, end_date, p_id)
+                                
+                                if p_data.empty:
+                                    st.warning("No historical data found for this pitcher in the selected timeframe.")
+                                else:
+                                    # Identify opponent: if pitcher's team != batting_team
+                                    p_data['batting_team'] = np.where(p_data['inning_topbot'] == 'Bot', p_data['home_team'], p_data['away_team'])
+                                    p_data['pitching_team'] = np.where(p_data['inning_topbot'] == 'Bot', p_data['away_team'], p_data['home_team'])
+                                    
+                                    # Filter strictly for when facing the selected opponent
+                                    vs_team_data = p_data[p_data['batting_team'] == hist_team].copy()
+                                    
+                                    if vs_team_data.empty:
+                                        st.warning(f"No recorded matchups found for {p_first} {p_last} against {hist_team} over the past {hist_years}.")
+                                    else:
+                                        # Calculate metrics
+                                        total_pitches = len(vs_team_data)
+                                        total_pa = vs_team_data['at_bat_number'].nunique() if 'at_bat_number' in vs_team_data else len(vs_team_data['game_pk'].unique())
+                                        
+                                        strikeouts = len(vs_team_data[vs_team_data['events'] == 'strikeout'])
+                                        whiffs = len(vs_team_data[vs_team_data['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])])
+                                        swings = len(vs_team_data[vs_team_data['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'])])
+                                        
+                                        k_rate = (strikeouts / max(1, vs_team_data['events'].dropna().count())) * 100
+                                        whiff_rate = (whiffs / max(1, swings)) * 100
+                                        
+                                        st.success(f"Historical Matchup Found: {p_first} {p_last} vs. {hist_team} ({hist_years})")
+                                        
+                                        # Metrics Display
+                                        m1, m2, m3, m4 = st.columns(4)
+                                        m1.metric("Total Pitches Thrown", total_pitches)
+                                        m2.metric("Recorded Strikeouts", strikeouts)
+                                        m3.metric("Strikeout % (Per Outcome)", f"{k_rate:.1f}%")
+                                        m4.metric("Whiff Rate", f"{whiff_rate:.1f}%")
+                                        
+                                        st.markdown("---")
+                                        st.markdown("##### Recent Head-to-Head Pitch Breakdown")
+                                        
+                                        # Group by pitch type against this team
+                                        pitch_breakdown = vs_team_data.groupby('pitch_name').agg(
+                                            Pitches=('pitch_type', 'count'),
+                                            Avg_Velocity=('release_speed', 'mean')
+                                        ).reset_index()
+                                        pitch_breakdown['Usage %'] = (pitch_breakdown['Pitches'] / total_pitches * 100)
+                                        
+                                        st.dataframe(
+                                            pitch_breakdown[['pitch_name', 'Pitches', 'Usage %', 'Avg_Velocity']].sort_values(by='Pitches', ascending=False).style.format({
+                                                'Usage %': '{:.1f}%',
+                                                'Avg_Velocity': '{:.1f} mph',
+                                                'Pitches': '{:,}'
+                                            }),
+                                            width="stretch"
+                                        )
+                    except Exception as e:
+                        st.error(f"Historical Query Error: {e}")
 
     # -------------------------------------------------------------
     # SUB-TAB 2: PITCHER VS. BATTER (ARSENAL MATRIX)
