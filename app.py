@@ -1027,52 +1027,70 @@ with tab3:
                 except Exception as e:
                     st.error(f"Error generating matrix: {e}")
 
-    # -------------------------------------------------------------
-    # SUB-TAB 3: PITCHER VS. TEAM (ARSENAL MATRIX)
+# -------------------------------------------------------------
+    # SUB-TAB 3: PITCHER VS. TEAM (GLOBAL ARSENAL MATRIX)
     # -------------------------------------------------------------
     with sim_team_matrix_tab:
-        st.markdown("#### 🏢 Pitcher Arsenal vs. Team Vulnerability Matrix")
-        st.write("Compare a pitcher's pitch usage against how a team performs against those specific pitch types globally.")
+        st.markdown("#### ⚾ Pitcher vs. Team (Arsenal Matrix)")
+        st.write("Compare a pitcher's pitch mix against how a lineup performs against those specific pitch types globally.")
         
-        tm_c1, tm_c2, tm_c3 = st.columns(3)
-        tm_p_first = tm_c1.text_input("Pitcher First Name", value="Paul", key="tm_p_first").strip().lower()
-        tm_p_last = tm_c2.text_input("Pitcher Last Name", value="Skenes", key="tm_p_last").strip().lower()
+        import pybaseball as pyb
+        from datetime import datetime, timedelta
+        import numpy as np
         
-        teams = sorted(['NYY', 'BAL', 'TBR', 'BOS', 'TOR', 'CLE', 'KCR', 'MIN', 'DET', 'CHW', 'HOU', 'SEA', 'TEX', 'OAK', 'LAA', 'PHI', 'ATL', 'NYM', 'WSN', 'MIA', 'MIL', 'STL', 'CHC', 'PIT', 'CIN', 'LAD', 'SDP', 'ARI', 'SFG', 'COL'])
-        tm_target = tm_c3.selectbox("Opposing Team", teams, key="tm_team")
+        # 1. Enable pybaseball's internal cache
+        pyb.cache.enable()
         
-        tm_days = st.slider("Days of Global Data to Analyze", min_value=7, max_value=60, value=30, step=7, key="tm_days")
-        
-        if st.button("Generate Team Matrix", key="btn_tm"):
-            import pybaseball as pyb
-            with st.spinner(f"Downloading {tm_days} days of MLB data and crossing with {tm_p_last.title()}'s arsenal..."):
-                try:
-                    meta = playerid_lookup(tm_p_last, tm_p_first)
-                    if not meta.empty:
-                        p_id = meta['key_mlbam'].values[0]
-                        start_dt = (datetime.today() - timedelta(days=tm_days)).strftime('%Y-%m-%d')
-                        end_dt = datetime.today().strftime('%Y-%m-%d')
+        # 2. Wrap the massive global data pull in Streamlit's cache
+        # This stores the result in memory for 1 hour so repeated clicks load instantly
+        @st.cache_data(ttl=3600)
+        def fetch_arsenal_data(days_back):
+            start_date = (datetime.today() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+            end_date = datetime.today().strftime('%Y-%m-%d')
+            return pyb.statcast(start_dt=start_date, end_dt=end_date), start_date, end_date
+
+        col_p, col_t, col_d = st.columns(3)
+        with col_p:
+            matrix_pitcher = st.text_input("Pitcher Last Name", value="Skubal", key="matrix_p2").strip().lower()
+        with col_t:
+            matrix_team = st.text_input("Opposing Team (e.g., NYY)", value="NYY", key="matrix_t2").strip().upper()
+        with col_d:
+            # 3. Cap the slider at 45 days to prevent Out-Of-Memory (OOM) server crashes
+            lookback_days = st.slider("Lookback Window (Days)", min_value=7, max_value=45, value=30, step=1)
+
+        if st.button("Run Arsenal Matrix", key="btn_matrix"):
+            if matrix_pitcher and matrix_team:
+                with st.spinner(f"Pulling {lookback_days}-day global data... (Caching for faster reloads)"):
+                    try:
+                        # Fetch Cached Global Data
+                        sc_data, s_dt, e_dt = fetch_arsenal_data(lookback_days)
+                        sc_data['batting_team'] = np.where(sc_data['inning_topbot'] == 'Bot', sc_data['home_team'], sc_data['away_team'])
                         
-                        p_pitches = statcast_pitcher(start_dt, end_dt, p_id)
-                        sc_data = pyb.statcast(start_dt=start_dt, end_dt=end_dt)
-                        
-                        if not p_pitches.empty and not sc_data.empty:
-                            p_usage = p_pitches.groupby('pitch_name').agg(
-                                Pitcher_Pitches=('pitch_type', 'count'),
-                                Avg_Velo=('release_speed', 'mean')
-                            ).reset_index()
-                            p_usage['Usage %'] = (p_usage['Pitcher_Pitches'] / p_usage['Pitcher_Pitches'].sum() * 100)
+                        # Fetch Pitcher Data
+                        meta = pyb.playerid_lookup(matrix_pitcher)
+                        if meta.empty:
+                            st.error("Pitcher not found.")
+                        else:
+                            p_id = meta['key_mlbam'].values[0]
+                            p_first = meta['name_first'].values[0].title()
+                            p_last = matrix_pitcher.title()
                             
-                            sc_data['batting_team'] = np.where(sc_data['inning_topbot'] == 'Bot', sc_data['home_team'], sc_data['away_team'])
-                            t_pitches = sc_data[sc_data['batting_team'] == tm_target].copy()
+                            p_pitches = pyb.statcast_pitcher(s_dt, e_dt, p_id)
                             
-                            if not t_pitches.empty:
+                            if p_pitches.empty:
+                                st.warning("No pitch data found for this pitcher in the selected window.")
+                            else:
+                                # Calculate Pitcher Usage
+                                p_usage = p_pitches.groupby('pitch_name').agg(Pitches=('pitch_type', 'count')).reset_index()
+                                p_usage['Usage %'] = (p_usage['Pitches'] / p_usage['Pitches'].sum() * 100)
+                                
+                                # Calculate Team Performance
+                                t_pitches = sc_data[sc_data['batting_team'] == matrix_team].copy()
                                 t_pitches['is_swing'] = t_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'])
                                 t_pitches['is_whiff'] = t_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
                                 t_pitches['is_hard_hit'] = t_pitches['launch_speed'] >= 95
                                 
                                 t_perf = t_pitches.groupby('pitch_name').agg(
-                                    Team_Pitches_Seen=('pitch_type', 'count'),
                                     Swings=('is_swing', 'sum'),
                                     Whiffs=('is_whiff', 'sum'),
                                     BBE=('launch_speed', 'count'),
@@ -1082,31 +1100,22 @@ with tab3:
                                 t_perf['Team Whiff %'] = (t_perf['Whiffs'] / t_perf['Swings'] * 100).fillna(0)
                                 t_perf['Team Hard Hit %'] = (t_perf['Hard_Hits'] / t_perf['BBE'] * 100).fillna(0)
                                 
-                                matrix = p_usage.merge(t_perf, on='pitch_name', how='inner')
+                                # Merge and Display
+                                matrix = p_usage.merge(t_perf, on='pitch_name', how='inner').sort_values(by='Usage %', ascending=False)
                                 
-                                if not matrix.empty:
-                                    matrix = matrix.sort_values(by='Usage %', ascending=False)
-                                    matrix_display = matrix[['pitch_name', 'Usage %', 'Avg_Velo', 'Team_Pitches_Seen', 'Team Whiff %', 'Team Hard Hit %']].copy()
-                                    matrix_display = matrix_display.rename(columns={'pitch_name': 'Pitch Type', 'Avg_Velo': 'Avg Velo', 'Team_Pitches_Seen': 'Team Pitches Seen (League Wide)'})
-                                    
-                                    matrix_display['Usage %'] = matrix_display['Usage %'].map("{:.1f}%".format)
-                                    matrix_display['Avg Velo'] = matrix_display['Avg Velo'].map("{:.1f} mph".format)
-                                    matrix_display['Team Whiff %'] = matrix_display['Team Whiff %'].map("{:.1f}%".format)
-                                    matrix_display['Team Hard Hit %'] = matrix_display['Team Hard Hit %'].map("{:.1f}%".format)
-                                    
-                                    st.markdown("---")
-                                    st.markdown(f"##### 🔬 Team Arsenal Matrix: {tm_p_first.title()} {tm_p_last.title()} vs. {tm_target} Lineup")
-                                    st.dataframe(matrix_display, hide_index=True, use_container_width=True)
-                                else:
-                                    st.warning("No overlapping pitch types found.")
-                            else:
-                                st.warning(f"No offensive data found for {tm_target} in this date range.")
-                        else:
-                            st.warning("Insufficient data for the pitcher or date range.")
-                    else:
-                        st.error("Pitcher not found.")
-                except Exception as e:
-                    st.error(f"Error: {e}")
+                                st.success(f"Arsenal Matchup: {p_first} {p_last} vs. {matrix_team} ({lookback_days}-Day Form)")
+                                
+                                # Using width="stretch" to resolve the Streamlit deprecation warning from your logs
+                                st.dataframe(
+                                    matrix[['pitch_name', 'Usage %', 'Team Whiff %', 'Team Hard Hit %']].style.format({
+                                        'Usage %': '{:.1f}%',
+                                        'Team Whiff %': '{:.1f}%',
+                                        'Team Hard Hit %': '{:.1f}%'
+                                    }),
+                                    width="stretch"
+                                )
+                    except Exception as e:
+                        st.error(f"Error loading matrix: {e}")
 
 
 # -------------------------------------------------------------
