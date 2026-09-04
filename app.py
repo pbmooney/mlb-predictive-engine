@@ -1253,20 +1253,20 @@ with tab3:
                                 st.write("Insufficient overlap data.")
                                 continue
                                 
-                            # EVALUATE DECISION MATRIX RULES (TESTING THRESHOLDS)
+                            # EVALUATE DECISION MATRIX RULES
                             edge_found = False
                             primary = matrix.sort_values(by='Usage %', ascending=False).iloc[0]
                             
-                            # Lowered thresholds for testing: Usage > 20% AND Whiff > 22%
-                            if primary['Usage %'] > 20 and primary['Team Whiff %'] > 22:
+                            # Rule 1: Strikeout Mismatch (Usage > 30% AND Team Whiff > 30%)
+                            if primary['Usage %'] > 30 and primary['Team Whiff %'] > 30:
                                 st.success(f"🚨 **STRIKEOUT EDGE DETECTED: {found_last.title()} OVER Ks**")
-                                st.write(f"*{found_first.title()} {found_last.title()} throws his {primary['pitch_name']} {primary['Usage %']:.1f}% of the time. The {team} have a {primary['Team Whiff %']:.1f}% Whiff Rate against that pitch over the last 10 days.*")
-                                edge_found = Test_Flag = True
+                                st.write(f"*{found_first.title()} {found_last.title()} throws his {primary['pitch_name']} {primary['Usage %']:.1f}% of the time. The {team} have a massive {primary['Team Whiff %']:.1f}% Whiff Rate against that pitch globally over the last 10 days.*")
+                                edge_found = True
                                 
-                            # Lowered thresholds for testing: Usage > 20% AND Hard Hit > 32%
-                            if primary['Usage %'] > 20 and primary['Team Hard Hit %'] > 32:
+                            # Rule 2: Fade Pitcher Mismatch (Usage > 30% AND Team Hard Hit > 40%)
+                            if primary['Usage %'] > 30 and primary['Team Hard Hit %'] > 40:
                                 st.error(f"🚨 **FADE PITCHER DETECTED: {team} TEAM TOTAL OVER**")
-                                st.write(f"*{team} crushes the {primary['pitch_name']} with a {primary['Team Hard Hit %']:.1f}% Hard Hit rate. {found_last.title()} relies on this pitch {primary['Usage %']:.1f}% of the time, creating a structural mismatch.*")
+                                st.write(f"*{team} crushes the {primary['pitch_name']} with a {primary['Team Hard Hit %']:.1f}% Hard Hit rate. {found_last.title()} relies on this pitch {primary['Usage %']:.1f}% of the time, creating a dangerous structural mismatch.*")
                                 edge_found = True
                                 
                             if not edge_found:
