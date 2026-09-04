@@ -1326,4 +1326,13 @@ with tab4:
     * **Dismantling the "Handedness Trap":** A lineup might rank top-5 in baseball against Left-Handed Pitching (LHP). However, if that ranking is driven by crushing soft-tossing fastballs, and the starting LHP throws a heavy diet of high-spin sliders (which the lineup struggles against), the generic split is meaningless. You exploit this discrepancy by backing the **Pitcher's Team Moneyline** or **Team Total Under**.
     * **Rolling Form vs. Stale Season Totals:** Using a customizable rolling window allows you to capture active mechanical tweaks, pitch velocity jumps, or offensive lineup slumps that full-season averages dilute.
     * **First 5 Innings (F5) Betting:** Bullpens introduce unpredictable variance. The Global Arsenal Matrix models the starting pitcher's interaction with the order through 15–20 outs, making it an ideal engine for **First 5 Innings (F5) Moneyline** and **F5 Under/Over** wagers.
+
+---
+    
+    ### 4. The Automated Slate Edge Scanner (Execution Methodology)
+    The Edge Scanner in Tab 3 operationalizes all the underlying principles of this playbook into a single, automated screening engine. Instead of manually cross-referencing pitch usage against opponent vulnerabilities game by game, the scanner applies hard quantitative filters across a slate:
+    
+    * **The 30/30 Strikeout Rule:** The scanner flags a high-confidence **Pitcher Over Ks** prop only when a pitcher's primary weapon exceeds a **30% usage rate** and matches against a lineup carrying a **30%+ Whiff Rate** against that specific pitch type over the rolling window. This filters out noise and isolates true high-leverage strikeout environments.
+    * **The Hard-Hit Mismatch Rule:** Conversely, it flags a **Team Total Over** (fade the pitcher) when a high-usage primary pitch (>30%) intersects with a lineup posting a **40%+ Hard Hit rate** against it. This identifies when a starting pitcher's go-to weapon is a mechanical liability.
+    * **Dynamic Threshold Tuning:** Because baseball sample sizes fluctuate, understanding *why* an edge triggers allows you to interpret the scanner's output with appropriate bankroll sizing—treating high-confidence 30/30 convergence signals as primary targets while treating neutral outputs as pass-spots.
     """)
