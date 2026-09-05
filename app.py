@@ -7,33 +7,39 @@ import numpy as np
 from datetime import datetime, timedelta
 import unicodedata
 
-# --- BULLETPROOF PLAYER ID LOOKUP ---
+# --- DEFINITIVE PLAYER ID LOOKUP WITH OVERRIDES ---
 @st.cache_data
 def get_player_id(first, last):
+    if not last and not first:
+        return None
+        
+    if not last and first:
+        parts = first.strip().split()
+        first = parts[0] if len(parts) > 1 else ""
+        last = parts[-1]
+        
+    clean_last = ''.join(c for c in unicodedata.normalize('NFKD', str(last)) if not unicodedata.combining(c)).lower().strip()
+    clean_first = ''.join(c for c in unicodedata.normalize('NFKD', str(first)) if not unicodedata.combining(c)).lower().strip() if first else ""
+    
+    # Explicit manual overrides for troublesome lookups
+    manual_overrides = {
+        ("jose", "ramirez"): 608070,  # José Ramírez
+        ("yordan", "alvarez"): 670541, # Yordan Álvarez
+    }
+    
+    if (clean_first, clean_last) in manual_overrides:
+        return manual_overrides[(clean_first, clean_last)]
+        
     try:
-        if not last and not first:
-            return None
-            
-        if not last and first:
-            parts = first.strip().split()
-            first = parts[0] if len(parts) > 1 else ""
-            last = parts[-1]
-            
-        clean_last = ''.join(c for c in unicodedata.normalize('NFKD', str(last)) if not unicodedata.combining(c)).lower().strip()
-        clean_first = ''.join(c for c in unicodedata.normalize('NFKD', str(first)) if not unicodedata.combining(c)).lower().strip() if first else ""
-        
-        # Native pybaseball lookup with fuzzy matching
         df = pyb.playerid_lookup(clean_last, clean_first if clean_first else None, fuzzy=True)
-        
         if df is not None and not df.empty:
             df = df.dropna(subset=['key_mlbam'])
             if not df.empty:
-                # If multiple matches exist, prioritize current/active players by filtering or taking the top row safely
                 return int(df['key_mlbam'].values[0])
     except Exception:
         pass
-    return None
-    
+        
+    return None    
 # --- DATA FETCHING FUNCTIONS ---
 @st.cache_data
 def get_statcast_data(player_id, days, player_type):
