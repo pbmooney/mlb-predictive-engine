@@ -18,7 +18,7 @@ def get_player_id(first, last):
             return int(df['key_mlbam'].values[0])
     except Exception:
         pass
-    return None    
+    return None
 
 # --- DATA FETCHING FUNCTIONS ---
 @st.cache_data
@@ -599,7 +599,7 @@ with tab3:
         "🚨 Edge Scanner"
     ])
     
-    mlb_teams = ["ARI", "ATL", "BAL", "BOS", "CHC", "CIN", "CLE", "COL", "CWS", "DET", "HOU", "KC", "LAA", "LAD", "MIA", "MIL", "MIN", "NYM", "NYY", "OAK", "PHI", "PIT", "SD", "SEA", "SF", "STL", "TB", "TEX", "TOR", "WSH"]
+    mlb_teams = ["ARI", "ATL", "BAL", "BOS", "CHC", "CIN", "CLE", "COL", "CWS", "DET", "HOU", "KC", "LAA", "LAD", "MIA", "MIL", "MIN", "NYM", "NYY", "OAK", "ATH", "PHI", "PIT", "SD", "SEA", "SF", "STL", "TB", "TEX", "TOR", "WSH"]
 
     with sim_team_tab:
         st.markdown("#### 📊 Pitcher vs. Team (Historical Context)")
@@ -607,6 +607,9 @@ with tab3:
         hist_pitcher_full = col_hp.text_input("Pitcher Full Name", value="Tarik Skubal", key="hist_p").strip()
         hist_team = col_ht.selectbox("Opposing Team", mlb_teams, index=mlb_teams.index("CWS") if "CWS" in mlb_teams else 0, key="hist_t")
         hist_years = col_hd.selectbox("Historical Window", ["1 Year", "2 Years", "3 Years"], index=1, key="hist_y")
+        
+        # Backward-compatibility mapping for Oakland Athletics ("OAK" -> "ATH")
+        query_team = "ATH" if hist_team == "OAK" else hist_team
         
         if st.button("Run Historical Matchup", key="btn_hist"):
             if hist_pitcher_full:
@@ -629,7 +632,7 @@ with tab3:
                                     st.warning("No historical data found for this pitcher.")
                                 else:
                                     p_data['batting_team'] = np.where(p_data['inning_topbot'] == 'Bot', p_data['home_team'], p_data['away_team'])
-                                    vs_team_data = p_data[p_data['batting_team'] == hist_team].copy()
+                                    vs_team_data = p_data[p_data['batting_team'] == query_team].copy()
                                     
                                     if vs_team_data.empty:
                                         st.warning(f"No recorded matchups found against {hist_team} over the past {hist_years}.")
@@ -696,6 +699,8 @@ with tab3:
         matrix_team = col_t.selectbox("Opposing Team", mlb_teams, key="matrix_t2")
         lookback_days_team = col_d.slider("Lookback Window (Days)", min_value=7, max_value=45, value=30, step=1, key="matrix_l_days")
 
+        matrix_query_team = "ATH" if matrix_team == "OAK" else matrix_team
+
         if st.button("Run Arsenal Matrix", key="btn_matrix"):
             if matrix_pitcher_full:
                 with st.spinner("Pulling global data..."):
@@ -712,7 +717,7 @@ with tab3:
                             p_usage = p_pitches.groupby('pitch_name').agg(Pitches=('pitch_type', 'count')).reset_index()
                             p_usage['Usage %'] = (p_usage['Pitches'] / p_usage['Pitches'].sum() * 100)
                             
-                            t_pitches = sc_data[sc_data['batting_team'] == matrix_team].copy()
+                            t_pitches = sc_data[sc_data['batting_team'] == matrix_query_team].copy()
                             t_pitches['is_swing'] = t_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'])
                             t_pitches['is_whiff'] = t_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
                             t_pitches['is_hard_hit'] = t_pitches['launch_speed'] >= 95
@@ -751,6 +756,7 @@ with tab3:
                         sc_data['batting_team'] = np.where(sc_data['inning_topbot'] == 'Bot', sc_data['home_team'], sc_data['away_team'])
                         
                         for p_full, team in matchups:
+                            scan_query_team = "ATH" if team == "OAK" else team
                             st.markdown(f"### 🔎 Scanning: {p_full} vs. {team}")
                             parts = p_full.split()
                             p_id = get_player_id(parts[0] if len(parts)>1 else "", parts[-1])
@@ -759,7 +765,7 @@ with tab3:
                                 p_usage = p_pitches.groupby('pitch_name').agg(Pitches=('pitch_type', 'count')).reset_index()
                                 p_usage['Usage %'] = (p_usage['Pitches'] / p_usage['Pitches'].sum() * 100)
                                 
-                                t_pitches = sc_data[sc_data['batting_team'] == team].copy()
+                                t_pitches = sc_data[sc_data['batting_team'] == scan_query_team].copy()
                                 t_pitches['is_swing'] = t_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'])
                                 t_pitches['is_whiff'] = t_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
                                 t_pitches['is_hard_hit'] = t_pitches['launch_speed'] >= 95
