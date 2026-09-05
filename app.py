@@ -7,52 +7,33 @@ import numpy as np
 from datetime import datetime, timedelta
 import unicodedata
 
-# --- ULTIMATE ROBUST PLAYER ID LOOKUP ---
+# --- DEBUGGABLE ROBUST PLAYER ID LOOKUP ---
 @st.cache_data
 def get_player_id(first, last):
-    try:
-        if not last and not first:
-            return None
-            
-        if not last and first:
-            parts = first.strip().split()
-            first = parts[0] if len(parts) > 1 else ""
-            last = parts[-1]
-            
-        clean_last = ''.join(c for c in unicodedata.normalize('NFKD', str(last)) if not unicodedata.combining(c)).lower().strip()
-        clean_first = ''.join(c for c in unicodedata.normalize('NFKD', str(first)) if not unicodedata.combining(c)).lower().strip() if first else ""
+    if not last and not first:
+        return None
         
-        # Pull fuzzy match candidates using just the last name string
-        df = pyb.playerid_lookup(clean_last, fuzzy=True)
-            
-        if not df.empty:
-            # Normalize registration columns for local filtering
-            df['clean_first_reg'] = df['name_first'].astype(str).apply(lambda x: ''.join(c for c in unicodedata.normalize('NFKD', x) if not unicodedata.combining(c)).lower().strip())
-            df['clean_last_reg'] = df['name_last'].astype(str).apply(lambda x: ''.join(c for c in unicodedata.normalize('NFKD', x) if not unicodedata.combining(c)).lower().strip())
-            
-            # 1. Try matching both first and last name loosely
-            if clean_first:
-                subset = df[df['clean_first_reg'].str.contains(clean_first, na=False) & df['clean_last_reg'].str.contains(clean_last, na=False)]
-                if not subset.empty:
-                    # Sort by most recently active player
-                    if 'mlb_played_last' in subset.columns:
-                        subset = subset.sort_values(by='mlb_played_last', ascending=False)
-                    return int(subset['key_mlbam'].values[0])
-            
-            # 2. Fallback to last name match sorted by most recent active player
-            last_matches = df[df['clean_last_reg'].str.contains(clean_last, na=False)]
-            if not last_matches.empty:
-                if 'mlb_played_last' in last_matches.columns:
-                    last_matches = last_matches.sort_values(by='mlb_played_last', ascending=False)
-                return int(last_matches['key_mlbam'].dropna().values[0])
-                
-            # 3. Absolute fallback to top row
-            if 'key_mlbam' in df.columns and not df['key_mlbam'].isna().all():
-                return int(df['key_mlbam'].dropna().values[0])
-    except Exception:
-        pass
-    return None
+    if not last and first:
+        parts = first.strip().split()
+        first = parts[0] if len(parts) > 1 else ""
+        last = parts[-1]
+        
+    clean_last = ''.join(c for c in unicodedata.normalize('NFKD', str(last)) if not unicodedata.combining(c)).lower().strip()
+    clean_first = ''.join(c for c in unicodedata.normalize('NFKD', str(first)) if not unicodedata.combining(c)).lower().strip() if first else ""
     
+    # Native pybaseball lookup with fuzzy matching
+    df = pyb.playerid_lookup(clean_last, clean_first if clean_first else None, fuzzy=True)
+    
+    if df is not None and not df.empty:
+        df = df.dropna(subset=['key_mlbam'])
+        if not df.empty:
+            # Sort by most recently active if column exists
+            if 'mlb_played_last' in df.columns:
+                df = df.sort_values(by='mlb_played_last', ascending=False)
+            return int(df['key_mlbam'].values[0])
+            
+    return None
+
 # --- DATA FETCHING FUNCTIONS ---
 @st.cache_data
 def get_statcast_data(player_id, days, player_type):
