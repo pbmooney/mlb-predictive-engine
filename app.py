@@ -5,6 +5,20 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 from datetime import datetime, timedelta
+import unicodedata
+import pybaseball as pyb
+
+# Automatically strip accents from ALL player lookups globally
+_original_playerid_lookup = pyb.playerid_lookup
+
+def _patched_playerid_lookup(last, first=None, fuzzy=False):
+    if last:
+        last = ''.join(c for c in unicodedata.normalize('NFKD', str(last)) if not unicodedata.combining(c))
+    if first:
+        first = ''.join(c for c in unicodedata.normalize('NFKD', str(first)) if not unicodedata.combining(c))
+    return _original_playerid_lookup(last, first=first, fuzzy=fuzzy)
+
+pyb.playerid_lookup = _patched_playerid_lookup
 
 # --- DATA FETCHING FUNCTIONS ---
 @st.cache_data
