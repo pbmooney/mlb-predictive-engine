@@ -8,14 +8,14 @@ from datetime import datetime, timedelta
 import unicodedata
 import pybaseball as pyb
 
-# Automatically strip accents from ALL player lookups globally
+# Automatically strip accents, lowercase, and enable fuzzy matching globally
 _original_playerid_lookup = pyb.playerid_lookup
 
-def _patched_playerid_lookup(last, first=None, fuzzy=False):
+def _patched_playerid_lookup(last, first=None, fuzzy=True):
     if last:
-        last = ''.join(c for c in unicodedata.normalize('NFKD', str(last)) if not unicodedata.combining(c))
+        last = ''.join(c for c in unicodedata.normalize('NFKD', str(last)) if not unicodedata.combining(c)).lower().strip()
     if first:
-        first = ''.join(c for c in unicodedata.normalize('NFKD', str(first)) if not unicodedata.combining(c))
+        first = ''.join(c for c in unicodedata.normalize('NFKD', str(first)) if not unicodedata.combining(c)).lower().strip()
     return _original_playerid_lookup(last, first=first, fuzzy=fuzzy)
 
 pyb.playerid_lookup = _patched_playerid_lookup
