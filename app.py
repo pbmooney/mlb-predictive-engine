@@ -11,38 +11,39 @@ import unicodedata
 @st.cache_data
 def get_player_id(first, last):
     try:
-        if not last:
+        if not last and not first:
             return None
-        
+            
         # Clean and normalize strings (remove accents, lowercase, strip)
+        # If only one string is provided, treat it as the last name or split it
+        if not last and first:
+            parts = first.strip().split()
+            first = parts[0] if len(parts) > 1 else ""
+            last = parts[-1]
+            
         clean_last = ''.join(c for c in unicodedata.normalize('NFKD', str(last)) if not unicodedata.combining(c)).lower().strip()
         clean_first = ''.join(c for c in unicodedata.normalize('NFKD', str(first)) if not unicodedata.combining(c)).lower().strip() if first else ""
         
-        # Query pybaseball using fuzzy matching on the last name
-        df = pyb.playerid_lookup(clean_last, fuzzy=True)
+        # pybaseball expects: playerid_lookup(last_name, first_name)
+        df = pyb.playerid_lookup(clean_last, clean_first if clean_first else None, fuzzy=True)
             
         if not df.empty:
-            # Normalize the dataframe columns locally for robust comparison
             df['clean_first_reg'] = df['name_first'].astype(str).apply(lambda x: ''.join(c for c in unicodedata.normalize('NFKD', x) if not unicodedata.combining(c)).lower().strip())
             df['clean_last_reg'] = df['name_last'].astype(str).apply(lambda x: ''.join(c for c in unicodedata.normalize('NFKD', x) if not unicodedata.combining(c)).lower().strip())
             
-            # Filter for last name match first
+            # Filter for last name match
             matched = df[df['clean_last_reg'] == clean_last]
             
-            # If first name is provided, narrow it down
             if clean_first and not matched.empty:
                 sub_matched = matched[matched['clean_first_reg'].str.contains(clean_first, na=False)]
                 if not sub_matched.empty:
                     return int(sub_matched['key_mlbam'].values[0])
             
-            # If we found a last name match but no tight first name subset, return the top last-name hit
-            if not matched.empty and 'key_mlbam' in matched.columns:
+            if not matched.empty and 'key_mlbam' in matched.columns and not matched['key_mlbam'].isna().all():
                 return int(matched['key_mlbam'].dropna().values[0])
                 
-            # Absolute fallback to top row of fuzzy search if dataframe isn't empty
             if 'key_mlbam' in df.columns and not df['key_mlbam'].isna().all():
                 return int(df['key_mlbam'].dropna().values[0])
-                
     except Exception:
         pass
     return None
