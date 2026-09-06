@@ -538,14 +538,16 @@ with tab1:
                                 st.markdown("**Batted Ball Spray Chart**")
                                 spray_data = data[data['hc_x'].notnull() & data['hc_y'].notnull()].copy()
                                 if not spray_data.empty:
-                                    fig, ax = plt.subplots(figsize=(4, 4))
+                                    fig, ax = plt.subplots(figsize=(6, 4))
                                     spray_data['spray_x'] = spray_data['hc_x'] - 125.42
                                     spray_data['spray_y'] = 200 - (spray_data['hc_y'] - 125.42)
-                                    sns.scatterplot(data=spray_data, x='spray_x', y='spray_y', hue='events', ax=ax, palette='Set1', s=20, alpha=0.7, legend=False)
+                                    sns.scatterplot(data=spray_data, x='spray_x', y='spray_y', hue='events', ax=ax, palette='Set1', s=25, alpha=0.8)
                                     ax.set_xlim(-150, 150)
                                     ax.set_ylim(-50, 250)
                                     ax.axis('off')
                                     ax.set_title("Estimated Spray Distribution")
+                                    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize='x-small', frameon=False)
+                                    plt.tight_layout()
                                     st.pyplot(fig)
                                     plt.close(fig)
                                 else:
@@ -617,12 +619,20 @@ with tab1:
                                 st.markdown("**Pitch Velocity Over Time**")
                                 velo_data = data.dropna(subset=['game_date', 'release_speed', 'pitch_name']).copy()
                                 if not velo_data.empty:
-                                    fig, ax = plt.subplots(figsize=(5, 4))
-                                    sns.lineplot(data=velo_data, x='game_date', y='release_speed', hue='pitch_name', ax=ax, marker='o', errorbar=None, legend=False)
+                                    velo_data['game_date'] = pd.to_datetime(velo_data['game_date'])
+                                    velo_data = velo_data.sort_values('game_date')
+                                    
+                                    fig, ax = plt.subplots(figsize=(6, 4))
+                                    sns.lineplot(data=velo_data, x='game_date', y='release_speed', hue='pitch_name', ax=ax, marker='o', errorbar=None)
                                     ax.set_title("Velocity Trend by Pitch Type")
                                     ax.set_xlabel("Date")
                                     ax.set_ylabel("Velo (mph)")
-                                    plt.xticks(rotation=45)
+                                    
+                                    ax.xaxis.set_major_locator(plt.MaxNLocator(6))
+                                    fig.autofmt_xdate()
+                                    
+                                    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize='x-small', frameon=False)
+                                    plt.tight_layout()
                                     st.pyplot(fig)
                                     plt.close(fig)
                                 else:
