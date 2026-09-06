@@ -893,3 +893,58 @@ with tab3:
 with tab4:
     st.header("📖 The Quantitative Bettor's Playbook")
     st.write("A complete guide to finding predictive edges across the platform.")
+
+st.markdown("""
+    ### 1. The Player Dashboard (Tab 1: Identifying Individual Form)
+    The Player Dashboard isolates an individual's current physical form from their stale, full-season statistics. The market prices props based on 162-game averages; you use this tab to exploit 14-to-30-day mechanical changes.
+    
+    * **Velocity & Spin Rate Tracking:** A pitcher whose average fastball drops by 1.5 mph over two consecutive starts is mathematically highly vulnerable to hard contact. The sportsbook will still price their outs or strikeout props based on their season average. Fade them immediately by betting their **Outs Recorded Under**.
+    * **Rolling Rates vs. Season Rates (The Slump/Surge Trap):** A batter might have a respectable 18% Strikeout Rate on the season, but a 35% rate over their last 10 games due to a swing flaw. Identify these rolling surges and bet the **Batter Over 0.5/1.5 Strikeouts** before the books adjust to the new baseline.
+    * **Batted Ball Luck (BABIP Regression):** If a hitter is batting .150 over the last week but has a 50% Hard Hit rate and elite exit velocities, they aren't actually slumping—they are hitting into bad luck. Target their **Over 1.5 Total Bases** or **Hits** props for positive regression at plus-money.
+    
+    ---
+    
+    ### 2. Team Matchups (Tab 2: Exploiting Macro Vulnerabilities)
+    The Team Matchups tab evaluates the holistic 9-man lineup and pitching staff dynamics. This is where you find structural edges that dictate Moneyline, Run Line, and Team Total bets.
+    
+    * **Bullpen Exhaustion & Leverage:** A starting pitcher might only be projected for 5.0 innings. If this tab reveals that a team's top three high-leverage relievers pitched the last two consecutive days, the back-half of the game is mathematically unprotected. Target the **Full Game Opponent Team Total Over**.
+    * **Granular Platoon Splits:** The public bets on basic Left vs. Right splits. Use this tab to dig deeper: Does a team hit LHP well overall, but struggle specifically on the road? Do they have a high wRC+ but also a massive strikeout rate against righties? Use these specific splits to find hidden value in **Team Strikeout Totals**.
+    * **Run Environment Context:** Combine team offensive profiles with park factors. A fly-ball heavy lineup playing in a warm, hitter-friendly environment presents a massive edge for **First 5 Innings Over** wagers, whereas a ground-ball heavy team neutralizes those same park factors.
+    
+    ---
+    
+    ### 3. The Matchup Simulator (Tab 3: Arsenal Matchups)
+    
+    Traditional sports betting markets are fundamentally reactionary. Sportsbooks set opening lines based on macro-level box scores, recent surface outcomes, and historical trends—and the general betting public wagers almost exclusively on those same narratives. 
+    
+    True quantitative edge is found not in *what* happened in past box scores, but in the *physical mechanics* that dictate future outcomes. 
+    
+    #### Pitcher vs. Team (Historical Box Score & Rate Context)
+    A standard box score is deceptive because it treats all volume equally. This module strips away superficial counting stats and injects operational rate metrics: **Innings Pitched (IP)**, **True Strikeout Rate (K%)**, and **Plate Appearance (PA) outcomes**.
+    
+    * **True K% vs. Raw Strikeouts:** A raw total of 14 strikeouts over two years looks dominant. However, if those 14 Ks required 21.0 innings (a below-average 17.5% K%), betting the **Over** on a 6.5 K line is a trap. Conversely, 14 Ks in 10.0 innings (35.0% K%) reveals elite swing-and-miss efficiency, signaling an immediate **Over** opportunity.
+    * **Pitcher Outs Recorded (IP Stability):** By tracking exact out conversion, this module isolates whether a starter works deep against a specific lineup. High pitch counts and elevated hit rates indicate an early exit, signaling value on **Pitcher Outs Recorded Under (e.g., Under 17.5 Outs)**.
+    
+    #### Pitcher vs. Batter (Individual Arsenal Matrix)
+    Baseball at-bats are micro-duels of pitch types versus bat paths. This module cross-references a pitcher's granular repertoire directly against a hitter's specific pitch-level swing tendencies.
+    
+    * **Exposing Lucky Hit Samples:** Batter A might be 4-for-8 (.500) historically against Pitcher B. But if the matrix shows that the pitcher throws 55% Sweepers and the batter possesses a 42% Whiff Rate against Sweepers, those previous hits were high-variance luck. You gain an edge by taking the **Under 0.5 or 1.5 Hits** at plus-money.
+    * **Pitch-Mix Dependency & Longshot HR Value:** If a pitcher throws a high-velocity 4-Seamer 60% of the time, and an opposing power hitter possesses a .620 slugging percentage and a 55% Hard Hit rate against fastballs over 96 mph, that matchup is primed for hard contact. This unlocks high-ROI targets for **Over 1.5 Total Bases** and **To Hit a Home Run**.
+    * **Batter Strikeout Props:** When a pitcher’s primary out-pitch directly attacks a hitter's primary zone of weakness, it triggers high-confidence wagers on **Batter Over 0.5/1.5 Strikeouts**.
+    
+    #### Pitcher vs. Team (Global Arsenal Matrix)
+    This module solves the biggest limitation in baseball analytics: **Small Sample Noise**. It pulls thousands of league-wide pitch observations over a rolling 30-to-60-day window to evaluate how an entire lineup handles the pitcher's exact pitch mix.
+    
+    * **Dismantling the "Handedness Trap":** A lineup might rank top-5 in baseball against Left-Handed Pitching (LHP). However, if that ranking is driven by crushing soft-tossing fastballs, and the starting LHP throws a heavy diet of high-spin sliders (which the lineup struggles against), the generic split is meaningless. You exploit this discrepancy by backing the **Pitcher's Team Moneyline** or **Team Total Under**.
+    * **Rolling Form vs. Stale Season Totals:** Using a customizable rolling window allows you to capture active mechanical tweaks, pitch velocity jumps, or offensive lineup slumps that full-season averages dilute.
+    * **First 5 Innings (F5) Betting:** Bullpens introduce unpredictable variance. The Global Arsenal Matrix models the starting pitcher's interaction with the order through 15–20 outs, making it an ideal engine for **First 5 Innings (F5) Moneyline** and **F5 Under/Over** wagers.
+
+    ---
+    
+    ### 4. The Automated Slate Edge Scanner (Execution Methodology)
+    The Edge Scanner in Tab 3 operationalizes all the underlying principles of this playbook into a single, automated screening engine. Instead of manually cross-referencing pitch usage against opponent vulnerabilities game by game, the scanner applies hard quantitative filters across a slate:
+    
+    * **The 30/30 Strikeout Rule:** The scanner flags a high-confidence **Pitcher Over Ks** prop only when a pitcher's primary weapon exceeds a **30% usage rate** and matches against a lineup carrying a **30%+ Whiff Rate** against that specific pitch type over the rolling window. This filters out noise and isolates true high-leverage strikeout environments.
+    * **The Hard-Hit Mismatch Rule:** Conversely, it flags a **Team Total Over** (fade the pitcher) when a high-usage primary pitch (>30%) intersects with a lineup posting a **40%+ Hard Hit rate** against it. This identifies when a starting pitcher's go-to weapon is a mechanical liability.
+    * **Dynamic Threshold Tuning:** Because baseball sample sizes fluctuate, understanding *why* an edge triggers allows you to interpret the scanner's output with appropriate bankroll sizing—treating high-confidence 30/30 convergence signals as primary targets while treating neutral outputs as pass-spots.
+    """)
