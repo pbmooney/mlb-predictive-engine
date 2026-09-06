@@ -522,7 +522,7 @@ with tab1:
                                 hot_data = data[(data['launch_speed'] >= 90) & (data['plate_x'].notnull()) & (data['plate_z'].notnull())]
                                 if not hot_data.empty:
                                     fig, ax = plt.subplots(figsize=(4, 4))
-                                    sns.scatterplot(data=hot_data, x='plate_x', y='plate_z', hue='launch_speed', palette='Reds', ax=ax, alpha=0.8)
+                                    sns.scatterplot(data=hot_data, x='plate_x', y='plate_z', hue='launch_speed', palette='Reds', ax=ax, alpha=0.8, legend=False)
                                     ax.set_xlim(-1.5, 1.5)
                                     ax.set_ylim(0.5, 4.5)
                                     ax.axvline(0.83, color='grey', ls='--')
@@ -541,7 +541,7 @@ with tab1:
                                     fig, ax = plt.subplots(figsize=(4, 4))
                                     spray_data['spray_x'] = spray_data['hc_x'] - 125.42
                                     spray_data['spray_y'] = 200 - (spray_data['hc_y'] - 125.42)
-                                    sns.scatterplot(data=spray_data, x='spray_x', y='spray_y', hue='events', ax=ax, palette='Set1', s=20, alpha=0.7)
+                                    sns.scatterplot(data=spray_data, x='spray_x', y='spray_y', hue='events', ax=ax, palette='Set1', s=20, alpha=0.7, legend=False)
                                     ax.set_xlim(-150, 150)
                                     ax.set_ylim(-50, 250)
                                     ax.axis('off')
@@ -601,14 +601,14 @@ with tab1:
                                 whiff_data = data[data['description'].isin(whiff_des) & data['plate_x'].notnull() & data['plate_z'].notnull()]
                                 if not whiff_data.empty:
                                     fig, ax = plt.subplots(figsize=(4, 4))
-                                    sns.scatterplot(data=whiff_data, x='plate_x', y='plate_z', hue='pitch_name', ax=ax, palette='tab10', alpha=0.8)
+                                    sns.scatterplot(data=whiff_data, x='plate_x', y='plate_z', hue='pitch_name', ax=ax, palette='tab10', alpha=0.8, legend=False)
                                     ax.set_xlim(-1.5, 1.5)
                                     ax.set_ylim(0.5, 4.5)
                                     ax.axvline(0.83, color='grey', ls='--')
                                     ax.axvline(-0.83, color='grey', ls='--')
                                     ax.axhline(1.5, color='grey', ls='--')
                                     ax.axhline(3.5, color='grey', ls='--')
-                                    ax.set_title("Whiff Locations (Catcher's Perspective)")
+                                    ax.set_title("Whiff Locations")
                                     st.pyplot(fig)
                                     plt.close(fig)
                                 else:
@@ -618,7 +618,7 @@ with tab1:
                                 velo_data = data.dropna(subset=['game_date', 'release_speed', 'pitch_name']).copy()
                                 if not velo_data.empty:
                                     fig, ax = plt.subplots(figsize=(5, 4))
-                                    sns.lineplot(data=velo_data, x='game_date', y='release_speed', hue='pitch_name', ax=ax, marker='o', errorbar=None)
+                                    sns.lineplot(data=velo_data, x='game_date', y='release_speed', hue='pitch_name', ax=ax, marker='o', errorbar=None, legend=False)
                                     ax.set_title("Velocity Trend by Pitch Type")
                                     ax.set_xlabel("Date")
                                     ax.set_ylabel("Velo (mph)")
@@ -628,39 +628,41 @@ with tab1:
                                 else:
                                     st.info("Not enough velocity tracking data available.")
 
-                        st.markdown("---")
-                        st.subheader("Fatigue & Inning Splits (NRFI / Pitch Outs)")
-                        pitch_data = data.copy()
-                        pitch_data['pa_idx'] = pitch_data.groupby('game_date')['at_bat_number'].transform(lambda x: x.rank(method='dense'))
-                        pitch_data['tto_raw'] = np.ceil(pitch_data['pa_idx'] / 9.0)
-                        pitch_data['TTO'] = pitch_data['tto_raw'].map({1.0: "1st Time", 2.0: "2nd Time", 3.0: "3rd+ Time"}).fillna("3rd+ Time")
-                        
-                        pa_events = ['strikeout', 'walk', 'single', 'double', 'triple', 'home_run', 'field_out', 'grounded_into_dp', 'force_out', 'fielders_choice', 'field_error', 'hit_by_pitch']
-                        pa_df = pitch_data[pitch_data['events'].isin(pa_events)].copy()
-                        
-                        if not pa_df.empty:
-                            pa_df['is_k'] = (pa_df['events'] == 'strikeout').astype(int)
-                            pa_df['is_on_base'] = pa_df['events'].isin(['single', 'double', 'triple', 'home_run', 'walk', 'hit_by_pitch']).astype(int)
+                        # --- INNING SPLITS (PITCHER ONLY) ---
+                        if player_type == "Pitcher":
+                            st.markdown("---")
+                            st.subheader("Fatigue & Inning Splits (NRFI / Pitch Outs)")
+                            pitch_data = data.copy()
+                            pitch_data['pa_idx'] = pitch_data.groupby('game_date')['at_bat_number'].transform(lambda x: x.rank(method='dense'))
+                            pitch_data['tto_raw'] = np.ceil(pitch_data['pa_idx'] / 9.0)
+                            pitch_data['TTO'] = pitch_data['tto_raw'].map({1.0: "1st Time", 2.0: "2nd Time", 3.0: "3rd+ Time"}).fillna("3rd+ Time")
                             
-                            i1, i2 = st.columns(2)
-                            with i1:
-                                st.markdown("**1st Inning (NRFI Engine)**")
-                                inn1 = pa_df[pa_df['inning'] == 1]
-                                if not inn1.empty:
-                                    k_rate_1 = inn1['is_k'].mean() * 100
-                                    obp_1 = inn1['is_on_base'].mean() * 100
-                                    st.metric("1st Inning K%", f"{k_rate_1:.1f}%")
-                                    st.metric("1st Inning OBP", f".{str(obp_1/100).split('.')[1][:3].ljust(3, '0')}" if obp_1 > 0 else ".000")
-                            with i2:
-                                st.markdown("**Times Through Order (Decay)**")
-                                tto_stats = pa_df.groupby('TTO').agg(
-                                    Batters_Faced=('events', 'count'),
-                                    K_Rate=('is_k', 'mean'),
-                                    OBP=('is_on_base', 'mean')
-                                ).reset_index()
-                                tto_stats['K_Rate'] = (tto_stats['K_Rate'] * 100).map("{:.1f}%".format)
-                                tto_stats['OBP'] = tto_stats['OBP'].apply(lambda x: f".{str(x).split('.')[1][:3].ljust(3, '0')}" if pd.notnull(x) and '.' in str(x) else ".000")
-                                st.dataframe(tto_stats, hide_index=True, use_container_width=True)
+                            pa_events = ['strikeout', 'walk', 'single', 'double', 'triple', 'home_run', 'field_out', 'grounded_into_dp', 'force_out', 'fielders_choice', 'field_error', 'hit_by_pitch']
+                            pa_df = pitch_data[pitch_data['events'].isin(pa_events)].copy()
+                            
+                            if not pa_df.empty:
+                                pa_df['is_k'] = (pa_df['events'] == 'strikeout').astype(int)
+                                pa_df['is_on_base'] = pa_df['events'].isin(['single', 'double', 'triple', 'home_run', 'walk', 'hit_by_pitch']).astype(int)
+                                
+                                i1, i2 = st.columns(2)
+                                with i1:
+                                    st.markdown("**1st Inning (NRFI Engine)**")
+                                    inn1 = pa_df[pa_df['inning'] == 1]
+                                    if not inn1.empty:
+                                        k_rate_1 = inn1['is_k'].mean() * 100
+                                        obp_1 = inn1['is_on_base'].mean() * 100
+                                        st.metric("1st Inning K%", f"{k_rate_1:.1f}%")
+                                        st.metric("1st Inning OBP", f".{str(obp_1/100).split('.')[1][:3].ljust(3, '0')}" if obp_1 > 0 else ".000")
+                                with i2:
+                                    st.markdown("**Times Through Order (Decay)**")
+                                    tto_stats = pa_df.groupby('TTO').agg(
+                                        Batters_Faced=('events', 'count'),
+                                        K_Rate=('is_k', 'mean'),
+                                        OBP=('is_on_base', 'mean')
+                                    ).reset_index()
+                                    tto_stats['K_Rate'] = (tto_stats['K_Rate'] * 100).map("{:.1f}%".format)
+                                    tto_stats['OBP'] = tto_stats['OBP'].apply(lambda x: f".{str(x).split('.')[1][:3].ljust(3, '0')}" if pd.notnull(x) and '.' in str(x) else ".000")
+                                    st.dataframe(tto_stats, hide_index=True, use_container_width=True)
 
 # ==========================================
 # TAB 2: LIVE TEAM VULNERABILITY BOARD
