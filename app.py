@@ -59,14 +59,12 @@ location = st.sidebar.radio("Location", ["All", "Home", "Away"])
 st.sidebar.markdown("---")
 st.sidebar.subheader("📋 Daily Edge Report")
 
-# Initialize the "shopping cart" memory
 if 'edge_report' not in st.session_state:
     st.session_state.edge_report = []
 
 if len(st.session_state.edge_report) > 0:
     st.sidebar.write(f"**{len(st.session_state.edge_report)}** +EV spots saved.")
     
-    # Convert saved bets to a DataFrame and encode as CSV
     report_df = pd.DataFrame(st.session_state.edge_report)
     csv = report_df.to_csv(index=False).encode('utf-8')
     
@@ -106,7 +104,6 @@ with tab1:
                 data = get_statcast_data(player_id, days_back, player_type)
             
             if not data.empty:
-                # Handle H2H filtering if opponent is provided
                 has_h2h = bool(opp_first and opp_last)
                 opp_id = None
                 
@@ -125,7 +122,6 @@ with tab1:
                         st.warning("Opposing player not found. Double check the spelling. Showing all data instead.")
                         has_h2h = False
 
-                # Apply standard situational splits only if NOT in strict H2H mode
                 if not has_h2h:
                     if player_type == "Batter":
                         if opp_hand == "RHP":
@@ -169,7 +165,6 @@ with tab1:
                         swing_count = len(h2h_swings)
                         whiff_pct = (whiff_count / swing_count * 100) if swing_count > 0 else 0
 
-                        # 1. Historical Box Score
                         st.markdown("##### 📜 Historical Box Score")
                         at_bats = data.dropna(subset=['events']).copy()
                         if not at_bats.empty:
@@ -199,7 +194,6 @@ with tab1:
                         
                         st.markdown("<br>", unsafe_allow_html=True)
                         
-                        # 2. Underlying Physics
                         st.markdown("##### 🔬 Underlying Physics")
                         st.caption(f"**Sample Size:** {total_pitches} total pitches seen in this specific matchup.")
                         
@@ -208,7 +202,6 @@ with tab1:
                         h2.metric("H2H Hard Hit %", f"{hard_hit_pct:.1f}%" if bbe_count > 0 else "N/A")
                         h3.metric("H2H Whiff %", f"{whiff_pct:.1f}%" if swing_count > 0 else "N/A")
                         
-                        # 3. Recent Game Logs
                         st.markdown("---")
                         st.markdown("##### 📅 Recent Game Logs (H2H)")
                         if player_type == "Batter":
@@ -226,7 +219,6 @@ with tab1:
                                 game_logs = events_df.groupby('game_date').agg(Strikeouts=('K', 'sum')).reset_index().sort_values('game_date', ascending=False)
                                 st.dataframe(game_logs, hide_index=True)
 
-                        # 4. Quality of Contact (Batter) OR Advanced Pitcher Diagnostics (Pitcher)
                         st.markdown("---")
                         if player_type == "Batter":
                             st.markdown("##### 💥 Quality of Contact")
@@ -268,7 +260,6 @@ with tab1:
                                 
                                 st.dataframe(diag_table[['pitch_name', 'Total_Pitches', 'Whiff%', 'CSW%']].rename(columns={'pitch_name': 'Pitch Type'}), hide_index=True)
 
-                        # 5. Performance by Pitch Type Seen (Batter)
                         if player_type == "Batter":
                             st.markdown("---")
                             st.markdown("##### ⚾ Performance by Pitch Type (Seen)")
@@ -287,7 +278,6 @@ with tab1:
                     # MODE B: MACRO PLAYER PROFILE (No Opponent Specified)
                     # ==========================================================
                     else:
-                        # --- ROLLING PROP HIT RATES ---
                         st.markdown("---")
                         st.subheader("Rolling Prop Hit Rates (L5 / L10 / L20)")
                         
@@ -375,7 +365,6 @@ with tab1:
                                 rates_df = pd.DataFrame(rates_data)
                                 st.dataframe(rates_df[["Prop", "L5 (Fair Odds)", "L10 (Fair Odds)", "L20 (Fair Odds)"]], hide_index=True)
 
-                        # --- BOOKMAKER EDGE & +EV CALCULATOR ---
                         if 'game_logs' in locals() and not game_logs.empty and 'props' in locals():
                             st.markdown("---")
                             st.markdown("##### 💰 Bookmaker Edge & +EV Calculator")
@@ -427,7 +416,6 @@ with tab1:
                                         })
                                         st.rerun()
 
-                        # --- QUALITY OF CONTACT ---
                         if player_type == "Batter":
                             st.markdown("---")
                             st.subheader("Quality of Contact (Batted Balls)")
@@ -450,7 +438,6 @@ with tab1:
                             else:
                                 st.info("Not enough batted ball data to calculate Quality of Contact.")
 
-                        # --- EXPECTED VS ACTUAL REGRESSION ---
                         if player_type == "Batter":
                             st.markdown("---")
                             st.subheader("Luck Regression (Expected vs Actual)")
@@ -489,7 +476,6 @@ with tab1:
                                 else:
                                     st.info("⚖️ **Balanced Profile:** The hitter's actual outcomes closely match their contact quality.")
 
-                        # --- PARK FACTORS ---
                         if player_type == "Batter":
                             st.markdown("---")
                             st.subheader("🏟️ Enterprise Park Factors (Handedness Splits)")
@@ -514,7 +500,8 @@ with tab1:
                             hit_factor = park_factors_adv[park_sel][b_hand]['Hit'] / 100.0
                             hr_factor = park_factors_adv[park_sel][b_hand]['HR'] / 100.0
                             
-                            ab_df_park = data[data['events'].isin(ab_events)].copy() if 'ab_events' in locals() else pd.DataFrame()
+                            ab_events_local = ['single', 'double', 'triple', 'home_run', 'field_out', 'grounded_into_dp', 'force_out', 'fielders_choice', 'field_error', 'strikeout', 'strikeout_double_play']
+                            ab_df_park = data[data['events'].isin(ab_events_local)].copy()
                             if not ab_df_park.empty:
                                 base_xba = ab_df_park['estimated_ba_using_speedangle'].fillna(0).mean()
                                 base_xslg = ab_df_park['estimated_slg_using_speedangle'].fillna(0).mean()
@@ -526,49 +513,44 @@ with tab1:
                                 pk1.metric(f"Park-Adjusted xBA", f".{str(adj_xba).split('.')[1][:3].ljust(3, '0')}" if adj_xba > 0 else ".000", delta=f"{adj_xba - base_xba:+.3f}")
                                 pk2.metric(f"Park-Adjusted xSLG", f".{str(adj_xslg).split('.')[1][:3].ljust(3, '0')}" if adj_xslg > 0 else ".000", delta=f"{adj_xslg - base_xslg:+.3f}")
 
-if player_type == "Batter":
-    st.markdown("---")
-    st.subheader("🔥 Batter Heat Zones & Spray Chart")
-    
-    col_hz, col_sc = st.columns(2)
-    
-    with col_hz:
-        st.markdown("**Hot Zones (Exit Velo > 90mph)**")
-        hot_data = data[(data['launch_speed'] >= 90) & (data['plate_x'].notnull()) & (data['plate_z'].notnull())]
-        if not hot_data.empty:
-            fig, ax = plt.subplots(figsize=(4, 4))
-            sns.scatterplot(data=hot_data, x='plate_x', y='plate_z', hue='launch_speed', palette='Reds', ax=ax, alpha=0.8)
-            ax.set_xlim(-1.5, 1.5)
-            ax.set_ylim(0.5, 4.5)
-            ax.axvline(0.83, color='grey', ls='--')
-            ax.axvline(-0.83, color='grey', ls='--')
-            ax.axhline(1.5, color='grey', ls='--')
-            ax.axhline(3.5, color='grey', ls='--')
-            ax.set_title("Hard-Hit Locations (EV >= 90)")
-            st.pyplot(fig)
-            plt.close(fig)
-        else:
-            st.info("Not enough hard-hit tracking data available.")
-            
-    with col_sc:
-        st.markdown("**Batted Ball Spray Chart**")
-        spray_data = data[data['hc_x'].notnull() & data['hc_y'].notnull()].copy()
-        if not spray_data.empty:
-            fig, ax = plt.subplots(figsize=(4, 4))
-            # Standard Statcast spray chart coordinates offset mapping
-            spray_data['spray_x'] = spray_data['hc_x'] - 125.42
-            spray_data['spray_y'] = 200 - (spray_data['hc_y'] - 125.42)
-            sns.scatterplot(data=spray_data, x='spray_x', y='spray_y', hue='events', ax=ax, palette='Set1', s=20, alpha=0.7)
-            ax.set_xlim(-150, 150)
-            ax.set_ylim(-50, 250)
-            ax.axis('off')
-            ax.set_title("Estimated Spray Distribution")
-            st.pyplot(fig)
-            plt.close(fig)
-        else:
-            st.info("Not enough coordinate data for spray chart.")
+                        if player_type == "Batter":
+                            st.markdown("---")
+                            st.subheader("🔥 Batter Heat Zones & Spray Chart")
+                            col_hz, col_sc = st.columns(2)
+                            with col_hz:
+                                st.markdown("**Hot Zones (Exit Velo > 90mph)**")
+                                hot_data = data[(data['launch_speed'] >= 90) & (data['plate_x'].notnull()) & (data['plate_z'].notnull())]
+                                if not hot_data.empty:
+                                    fig, ax = plt.subplots(figsize=(4, 4))
+                                    sns.scatterplot(data=hot_data, x='plate_x', y='plate_z', hue='launch_speed', palette='Reds', ax=ax, alpha=0.8)
+                                    ax.set_xlim(-1.5, 1.5)
+                                    ax.set_ylim(0.5, 4.5)
+                                    ax.axvline(0.83, color='grey', ls='--')
+                                    ax.axvline(-0.83, color='grey', ls='--')
+                                    ax.axhline(1.5, color='grey', ls='--')
+                                    ax.axhline(3.5, color='grey', ls='--')
+                                    ax.set_title("Hard-Hit Locations (EV >= 90)")
+                                    st.pyplot(fig)
+                                    plt.close(fig)
+                                else:
+                                    st.info("Not enough hard-hit tracking data available.")
+                            with col_sc:
+                                st.markdown("**Batted Ball Spray Chart**")
+                                spray_data = data[data['hc_x'].notnull() & data['hc_y'].notnull()].copy()
+                                if not spray_data.empty:
+                                    fig, ax = plt.subplots(figsize=(4, 4))
+                                    spray_data['spray_x'] = spray_data['hc_x'] - 125.42
+                                    spray_data['spray_y'] = 200 - (spray_data['hc_y'] - 125.42)
+                                    sns.scatterplot(data=spray_data, x='spray_x', y='spray_y', hue='events', ax=ax, palette='Set1', s=20, alpha=0.7)
+                                    ax.set_xlim(-150, 150)
+                                    ax.set_ylim(-50, 250)
+                                    ax.axis('off')
+                                    ax.set_title("Estimated Spray Distribution")
+                                    st.pyplot(fig)
+                                    plt.close(fig)
+                                else:
+                                    st.info("Not enough coordinate data for spray chart.")
 
-                        # --- PITCH DIAGNOSTICS ---
                         st.markdown("---")
                         if player_type == "Batter":
                             st.subheader("Performance by Pitch Type (Seen)")
@@ -610,47 +592,42 @@ if player_type == "Batter":
                                 
                                 st.dataframe(diag_table[['pitch_name', 'Total_Pitches', 'Whiff%', 'CSW%']].rename(columns={'pitch_name': 'Pitch Type'}), hide_index=True)
 
-if player_type == "Pitcher":
-    st.markdown("---")
-    st.subheader("❄️ Pitcher Cold Zones & Velocity Trends")
-    
-    col_cz, col_vt = st.columns(2)
-    
-    with col_cz:
-        st.markdown("**Cold Zones (Whiff Locations)**")
-        whiff_des = ['swinging_strike', 'swinging_strike_blocked', 'missed_bunt']
-        whiff_data = data[data['description'].isin(whiff_des) & data['plate_x'].notnull() & data['plate_z'].notnull()]
-        if not whiff_data.empty:
-            fig, ax = plt.subplots(figsize=(4, 4))
-            sns.scatterplot(data=whiff_data, x='plate_x', y='plate_z', hue='pitch_name', ax=ax, palette='tab10', alpha=0.8)
-            ax.set_xlim(-1.5, 1.5)
-            ax.set_ylim(0.5, 4.5)
-            ax.axvline(0.83, color='grey', ls='--')
-            ax.axvline(-0.83, color='grey', ls='--')
-            ax.axhline(1.5, color='grey', ls='--')
-            ax.axhline(3.5, color='grey', ls='--')
-            ax.set_title("Whiff Locations (Catcher's Perspective)")
-            st.pyplot(fig)
-            plt.close(fig)
-        else:
-            st.info("Not enough whiff location data available.")
-            
-    with col_vt:
-        st.markdown("**Pitch Velocity Over Time**")
-        velo_data = data.dropna(subset=['game_date', 'release_speed', 'pitch_name']).copy()
-        if not velo_data.empty:
-            fig, ax = plt.subplots(figsize=(5, 4))
-            sns.lineplot(data=velo_data, x='game_date', y='release_speed', hue='pitch_name', ax=ax, marker='o', errorbar=None)
-            ax.set_title("Velocity Trend by Pitch Type")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Velo (mph)")
-            plt.xticks(rotation=45)
-            st.pyplot(fig)
-            plt.close(fig)
-        else:
-            st.info("Not enough velocity tracking data available.")
+                            st.markdown("---")
+                            st.subheader("❄️ Pitcher Cold Zones & Velocity Trends")
+                            col_cz, col_vt = st.columns(2)
+                            with col_cz:
+                                st.markdown("**Cold Zones (Whiff Locations)**")
+                                whiff_des = ['swinging_strike', 'swinging_strike_blocked', 'missed_bunt']
+                                whiff_data = data[data['description'].isin(whiff_des) & data['plate_x'].notnull() & data['plate_z'].notnull()]
+                                if not whiff_data.empty:
+                                    fig, ax = plt.subplots(figsize=(4, 4))
+                                    sns.scatterplot(data=whiff_data, x='plate_x', y='plate_z', hue='pitch_name', ax=ax, palette='tab10', alpha=0.8)
+                                    ax.set_xlim(-1.5, 1.5)
+                                    ax.set_ylim(0.5, 4.5)
+                                    ax.axvline(0.83, color='grey', ls='--')
+                                    ax.axvline(-0.83, color='grey', ls='--')
+                                    ax.axhline(1.5, color='grey', ls='--')
+                                    ax.axhline(3.5, color='grey', ls='--')
+                                    ax.set_title("Whiff Locations (Catcher's Perspective)")
+                                    st.pyplot(fig)
+                                    plt.close(fig)
+                                else:
+                                    st.info("Not enough whiff location data available.")
+                            with col_vt:
+                                st.markdown("**Pitch Velocity Over Time**")
+                                velo_data = data.dropna(subset=['game_date', 'release_speed', 'pitch_name']).copy()
+                                if not velo_data.empty:
+                                    fig, ax = plt.subplots(figsize=(5, 4))
+                                    sns.lineplot(data=velo_data, x='game_date', y='release_speed', hue='pitch_name', ax=ax, marker='o', errorbar=None)
+                                    ax.set_title("Velocity Trend by Pitch Type")
+                                    ax.set_xlabel("Date")
+                                    ax.set_ylabel("Velo (mph)")
+                                    plt.xticks(rotation=45)
+                                    st.pyplot(fig)
+                                    plt.close(fig)
+                                else:
+                                    st.info("Not enough velocity tracking data available.")
 
-                        # --- INNING SPLITS ---
                         st.markdown("---")
                         st.subheader("Fatigue & Inning Splits (NRFI / Pitch Outs)")
                         pitch_data = data.copy()
@@ -697,11 +674,11 @@ with tab2:
     split = t_col2.radio("Opposing Pitcher Handedness", ["Overall", "vs RHP", "vs LHP"], key="t_split")
     
     if st.button("Fetch Team Stats", key="btn_team_stats"):
-        days_back = int(timeframe.split()[1])
-        start_dt = (datetime.today() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+        days_back_t = int(timeframe.split()[1])
+        start_dt = (datetime.today() - timedelta(days=days_back_t)).strftime('%Y-%m-%d')
         end_dt = datetime.today().strftime('%Y-%m-%d')
         
-        with st.spinner(f"Downloading every MLB pitch from the last {days_back} days..."):
+        with st.spinner(f"Downloading every MLB pitch from the last {days_back_t} days..."):
             try:
                 sc_data = pyb.statcast(start_dt=start_dt, end_dt=end_dt)
                 if not sc_data.empty:
@@ -750,7 +727,7 @@ with tab2:
                             display_df['ISO'] = display_df['ISO'].map("{:.3f}".format)
                             display_df['OBP'] = display_df['OBP'].map("{:.3f}".format)
                             
-                            st.success(f"Successfully crunched team splits over the last {days_back} days!")
+                            st.success(f"Successfully crunched team splits over the last {days_back_t} days!")
                             st.dataframe(display_df, hide_index=True, use_container_width=True)
             except Exception as e:
                 st.error(f"Error fetching team stats: {e}")
@@ -776,7 +753,6 @@ with tab3:
         hist_team = col_ht.selectbox("Opposing Team", mlb_teams, index=mlb_teams.index("CWS") if "CWS" in mlb_teams else 0, key="hist_t")
         hist_years = col_hd.selectbox("Historical Window", ["1 Year", "2 Years", "3 Years"], index=1, key="hist_y")
         
-        # Backward-compatibility mapping for Oakland Athletics ("OAK" -> "ATH")
         query_team = "ATH" if hist_team == "OAK" else hist_team
         
         if st.button("Run Historical Matchup", key="btn_hist"):
@@ -960,58 +936,3 @@ with tab3:
 with tab4:
     st.header("📖 The Quantitative Bettor's Playbook")
     st.write("A complete guide to finding predictive edges across the platform.")
-    
-    st.markdown("""
-    ### 1. The Player Dashboard (Tab 1: Identifying Individual Form)
-    The Player Dashboard isolates an individual's current physical form from their stale, full-season statistics. The market prices props based on 162-game averages; you use this tab to exploit 14-to-30-day mechanical changes.
-    
-    * **Velocity & Spin Rate Tracking:** A pitcher whose average fastball drops by 1.5 mph over two consecutive starts is mathematically highly vulnerable to hard contact. The sportsbook will still price their outs or strikeout props based on their season average. Fade them immediately by betting their **Outs Recorded Under**.
-    * **Rolling Rates vs. Season Rates (The Slump/Surge Trap):** A batter might have a respectable 18% Strikeout Rate on the season, but a 35% rate over their last 10 games due to a swing flaw. Identify these rolling surges and bet the **Batter Over 0.5/1.5 Strikeouts** before the books adjust to the new baseline.
-    * **Batted Ball Luck (BABIP Regression):** If a hitter is batting .150 over the last week but has a 50% Hard Hit rate and elite exit velocities, they aren't actually slumping—they are hitting into bad luck. Target their **Over 1.5 Total Bases** or **Hits** props for positive regression at plus-money.
-    
-    ---
-    
-    ### 2. Team Matchups (Tab 2: Exploiting Macro Vulnerabilities)
-    The Team Matchups tab evaluates the holistic 9-man lineup and pitching staff dynamics. This is where you find structural edges that dictate Moneyline, Run Line, and Team Total bets.
-    
-    * **Bullpen Exhaustion & Leverage:** A starting pitcher might only be projected for 5.0 innings. If this tab reveals that a team's top three high-leverage relievers pitched the last two consecutive days, the back-half of the game is mathematically unprotected. Target the **Full Game Opponent Team Total Over**.
-    * **Granular Platoon Splits:** The public bets on basic Left vs. Right splits. Use this tab to dig deeper: Does a team hit LHP well overall, but struggle specifically on the road? Do they have a high wRC+ but also a massive strikeout rate against righties? Use these specific splits to find hidden value in **Team Strikeout Totals**.
-    * **Run Environment Context:** Combine team offensive profiles with park factors. A fly-ball heavy lineup playing in a warm, hitter-friendly environment presents a massive edge for **First 5 Innings Over** wagers, whereas a ground-ball heavy team neutralizes those same park factors.
-    
-    ---
-    
-    ### 3. The Matchup Simulator (Tab 3: Arsenal Matchups)
-    
-    Traditional sports betting markets are fundamentally reactionary. Sportsbooks set opening lines based on macro-level box scores, recent surface outcomes, and historical trends—and the general betting public wagers almost exclusively on those same narratives. 
-    
-    True quantitative edge is found not in *what* happened in past box scores, but in the *physical mechanics* that dictate future outcomes. 
-    
-    #### Pitcher vs. Team (Historical Box Score & Rate Context)
-    A standard box score is deceptive because it treats all volume equally. This module strips away superficial counting stats and injects operational rate metrics: **Innings Pitched (IP)**, **True Strikeout Rate (K%)**, and **Plate Appearance (PA) outcomes**.
-    
-    * **True K% vs. Raw Strikeouts:** A raw total of 14 strikeouts over two years looks dominant. However, if those 14 Ks required 21.0 innings (a below-average 17.5% K%), betting the **Over** on a 6.5 K line is a trap. Conversely, 14 Ks in 10.0 innings (35.0% K%) reveals elite swing-and-miss efficiency, signaling an immediate **Over** opportunity.
-    * **Pitcher Outs Recorded (IP Stability):** By tracking exact out conversion, this module isolates whether a starter works deep against a specific lineup. High pitch counts and elevated hit rates indicate an early exit, signaling value on **Pitcher Outs Recorded Under (e.g., Under 17.5 Outs)**.
-    
-    #### Pitcher vs. Batter (Individual Arsenal Matrix)
-    Baseball at-bats are micro-duels of pitch types versus bat paths. This module cross-references a pitcher's granular repertoire directly against a hitter's specific pitch-level swing tendencies.
-    
-    * **Exposing Lucky Hit Samples:** Batter A might be 4-for-8 (.500) historically against Pitcher B. But if the matrix shows that the pitcher throws 55% Sweepers and the batter possesses a 42% Whiff Rate against Sweepers, those previous hits were high-variance luck. You gain an edge by taking the **Under 0.5 or 1.5 Hits** at plus-money.
-    * **Pitch-Mix Dependency & Longshot HR Value:** If a pitcher throws a high-velocity 4-Seamer 60% of the time, and an opposing power hitter possesses a .625 slugging percentage and a 55% Hard Hit rate against fastballs over 96 mph, that matchup is primed for hard contact. This unlocks high-ROI targets for **Over 1.5 Total Bases** and **To Hit a Home Run**.
-    * **Batter Strikeout Props:** When a pitcher’s primary out-pitch directly attacks a hitter's primary zone of weakness, it triggers high-confidence wagers on **Batter Over 0.5/1.5 Strikeouts**.
-    
-    #### Pitcher vs. Team (Global Arsenal Matrix)
-    This module solves the biggest limitation in baseball analytics: **Small Sample Noise**. It pulls thousands of league-wide pitch observations over a rolling 30-to-60-day window to evaluate how an entire lineup handles the pitcher's exact pitch mix.
-    
-    * **Dismantling the "Handedness Trap":** A lineup might rank top-5 in baseball against Left-Handed Pitching (LHP). However, if that ranking is driven by crushing soft-tossing fastballs, and the starting LHP throws a heavy diet of high-spin sliders (which the lineup struggles against), the generic split is meaningless. You exploit this discrepancy by backing the **Pitcher's Team Moneyline** or **Team Total Under**.
-    * **Rolling Form vs. Stale Season Totals:** Using a customizable rolling window allows you to capture active mechanical tweaks, pitch velocity jumps, or offensive lineup slumps that full-season averages dilute.
-    * **First 5 Innings (F5) Betting:** Bullpens introduce unpredictable variance. The Global Arsenal Matrix models the starting pitcher's interaction with the order through 15–20 outs, making it an ideal engine for **First 5 Innings (F5) Moneyline** and **F5 Under/Over** wagers.
-
-    ---
-    
-    ### 4. The Automated Slate Edge Scanner (Execution Methodology)
-    The Edge Scanner in Tab 3 operationalizes all the underlying principles of this playbook into a single, automated screening engine. Instead of manually cross-referencing pitch usage against opponent vulnerabilities game by game, the scanner applies hard quantitative filters across a slate:
-    
-    * **The 30/30 Strikeout Rule:** The scanner flags a high-confidence **Pitcher Over Ks** prop only when a pitcher's primary weapon exceeds a **30% usage rate** and matches against a lineup carrying a **30%+ Whiff Rate** against that specific pitch type over the rolling window. This filters out noise and isolates true high-leverage strikeout environments.
-    * **The Hard-Hit Mismatch Rule:** Conversely, it flags a **Team Total Over** (fade the pitcher) when a high-usage primary pitch (>30%) intersects with a lineup posting a **40%+ Hard Hit rate** against it. This identifies when a starting pitcher's go-to weapon is a mechanical liability.
-    * **Dynamic Threshold Tuning:** Because baseball sample sizes fluctuate, understanding *why* an edge triggers allows you to interpret the scanner's output with appropriate bankroll sizing—treating high-confidence 30/30 convergence signals as primary targets while treating neutral outputs as pass-spots.
-    """)
