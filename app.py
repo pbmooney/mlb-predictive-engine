@@ -600,7 +600,7 @@ with tab1:
                                     OBP=('is_on_base', 'mean')
                                 ).reset_index()
                                 tto_stats['K_Rate'] = (tto_stats['K_Rate'] * 100).map("{:.1f}%".format)
-                                tto_stats['OBP'] = tto_stats['OBP'].apply(lambda x: f".{str(x).str.split('.').str[1].str[:3].str.ljust(3, '0')}" if pd.notnull(x) else ".000")
+                                tto_stats['OBP'] = tto_stats['OBP'].apply(lambda x: f".{str(x).split('.')[1][:3].ljust(3, '0')}" if pd.notnull(x) and '.' in str(x) else ".000")
                                 st.dataframe(tto_stats, hide_index=True, use_container_width=True)
 
 # ==========================================
