@@ -106,7 +106,11 @@ with tab1:
                 data = get_statcast_data(player_id, days_back, player_type)
             
             if not data.empty:
-                if opp_first and opp_last:
+                # Handle H2H filtering if opponent is provided
+                has_h2h = bool(opp_first and opp_last)
+                opp_id = None
+                
+                if has_h2h:
                     opp_id = get_player_id(opp_first, opp_last)
                     if opp_id:
                         if player_type == "Batter":
@@ -119,181 +123,270 @@ with tab1:
                             st.stop()
                     else:
                         st.warning("Opposing player not found. Double check the spelling. Showing all data instead.")
+                        has_h2h = False
 
-                if player_type == "Batter":
-                    if opp_hand == "RHP":
-                        data = data[data['p_throws'] == 'R']
-                    elif opp_hand == "LHP":
-                        data = data[data['p_throws'] == 'L']
-                else:
-                    if opp_hand == "RHB":
-                        data = data[data['stand'] == 'R']
-                    elif opp_hand == "LHB":
-                        data = data[data['stand'] == 'L']
-                    
-                if location == "Home":
-                    data = data[data['inning_topbot'] == 'Bot']
-                elif location == "Away":
-                    data = data[data['inning_topbot'] == 'Top']
+                # Apply standard situational splits only if NOT in strict H2H mode
+                if not has_h2h:
+                    if player_type == "Batter":
+                        if opp_hand == "RHP":
+                            data = data[data['p_throws'] == 'R']
+                        elif opp_hand == "LHP":
+                            data = data[data['p_throws'] == 'L']
+                    else:
+                        if opp_hand == "RHB":
+                            data = data[data['stand'] == 'R']
+                        elif opp_hand == "LHB":
+                            data = data[data['stand'] == 'L']
+                        
+                    if location == "Home":
+                        data = data[data['inning_topbot'] == 'Bot']
+                    elif location == "Away":
+                        data = data[data['inning_topbot'] == 'Top']
                 
                 if not data.empty:
-                    st.success(f"Successfully pulled {len(data)} pitches for {first_name} {last_name}!")
+                    st.success(f"Successfully pulled data for {first_name} {last_name}!")
                     
-                    # --- ROLLING PROP HIT RATES ---
-                    st.markdown("---")
-                    st.subheader("Rolling Prop Hit Rates (L5 / L10 / L20)")
-                    
-                    events_df = data.dropna(subset=['events']).copy()
-                    
-                    if not events_df.empty:
-                        st.caption("Adjust the targets below to match current sportsbook lines.")
+                    # ==========================================================
+                    # MODE A: H2H MICRO VIEW (Opponent Specified)
+                    # ==========================================================
+                    if has_h2h:
+                        st.markdown(f"### ⚔️ H2H Matchup: {first_name.title()} {last_name.title()} vs. {opp_first.title()} {opp_last.title()}")
                         
-                        if player_type == "Batter":
-                            events_df['TB'] = events_df['events'].map({'single': 1, 'double': 2, 'triple': 3, 'home_run': 4}).fillna(0)
-                            events_df['Hit'] = events_df['events'].isin(['single', 'double', 'triple', 'home_run']).astype(int)
-                            events_df['HR'] = (events_df['events'] == 'home_run').astype(int)
-                            
-                            game_logs = events_df.groupby('game_date').agg(
-                                TB=('TB', 'sum'),
-                                Hits=('Hit', 'sum'),
-                                HRs=('HR', 'sum')
-                            ).reset_index().sort_values('game_date', ascending=False)
-                            
-                            col_h, col_tb, col_hr = st.columns(3)
-                            t_hits = col_h.number_input("Hits", min_value=1, max_value=5, value=1)
-                            t_tb = col_tb.number_input("Total Bases", min_value=1, max_value=10, value=2)
-                            t_hr = col_hr.number_input("Home Runs", min_value=1, max_value=4, value=1)
-                            
-                            props = [
-                                {"Prop": f"{t_hits}+ Hits", "Column": "Hits", "Target": t_hits},
-                                {"Prop": f"{t_tb}+ Total Bases", "Column": "TB", "Target": t_tb},
-                                {"Prop": f"{t_hr}+ Home Runs", "Column": "HRs", "Target": t_hr}
-                            ]
-                        else:
-                            events_df['K'] = (events_df['events'] == 'strikeout').astype(int)
-                            game_logs = events_df.groupby('game_date').agg(
-                                Strikeouts=('K', 'sum')
-                            ).reset_index().sort_values('game_date', ascending=False)
-                            
-                            col_k1, col_k2 = st.columns(2)
-                            t_k1 = col_k1.number_input("Main Strikeout Line", min_value=1, max_value=20, value=5)
-                            t_k2 = col_k2.number_input("Alt Strikeout Line", min_value=1, max_value=20, value=7)
-                            
-                            props = [
-                                {"Prop": f"{t_k1}+ Strikeouts", "Column": "Strikeouts", "Target": t_k1},
-                                {"Prop": f"{t_k2}+ Strikeouts", "Column": "Strikeouts", "Target": t_k2},
-                            ]
-                            
-                        if not game_logs.empty:
-                            def prob_to_american(p):
-                                if p <= 0: return "N/A"
-                                if p >= 1: return "-∞"
-                                if p >= 0.5:
-                                    return f"-{int(round((p / (1 - p)) * 100))}"
-                                else:
-                                    return f"+{int(round(((1 - p) / p) * 100))}"
-
-                            def american_to_prob(odds):
-                                try:
-                                    odds = float(odds)
-                                    if odds < 0:
-                                        return abs(odds) / (abs(odds) + 100.0)
-                                    else:
-                                        return 100.0 / (odds + 100.0)
-                                except Exception:
-                                    return None
-
-                            rates_data = []
-                            for p in props:
-                                col = p["Column"]
-                                target = p["Target"]
-                                
-                                p5 = (game_logs.head(5)[col] >= target).mean() if len(game_logs) >= 5 else None
-                                p10 = (game_logs.head(10)[col] >= target).mean() if len(game_logs) >= 10 else None
-                                p20 = (game_logs.head(20)[col] >= target).mean() if len(game_logs) >= 20 else None
-                                
-                                l5_str = f"{p5 * 100:.0f}% ({prob_to_american(p5)})" if p5 is not None else "N/A (<5 G)"
-                                l10_str = f"{p10 * 100:.0f}% ({prob_to_american(p10)})" if p10 is not None else "N/A (<10 G)"
-                                l20_str = f"{p20 * 100:.0f}% ({prob_to_american(p20)})" if p20 is not None else "N/A (<20 G)"
-                                
-                                rates_data.append({
-                                    "Prop": p["Prop"], 
-                                    "L5 (Fair Odds)": l5_str, 
-                                    "L10 (Fair Odds)": l10_str, 
-                                    "L20 (Fair Odds)": l20_str,
-                                    "p10_raw": p10
-                                })
-                                
-                            rates_df = pd.DataFrame(rates_data)
-                            st.dataframe(rates_df[["Prop", "L5 (Fair Odds)", "L10 (Fair Odds)", "L20 (Fair Odds)"]], hide_index=True)
-
-                    # --- ADVANCED HEAD-TO-HEAD ENGINE ---
-                    if opp_first and opp_last:
-                        st.markdown("---")
-                        st.subheader(f"⚔️ Matchup: vs. {opp_first.title()} {opp_last.title()}")
+                        in_play = ['hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score']
+                        swings = ['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt']
+                        whiffs = ['swinging_strike', 'swinging_strike_blocked', 'missed_bunt']
                         
-                        h2h_df = data.copy()
+                        h2h_bbe = data[data['description'].isin(in_play)].copy()
+                        h2h_swings = data[data['description'].isin(swings)].copy()
                         
-                        if not h2h_df.empty:
-                            in_play = ['hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score']
-                            swings = ['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt']
-                            whiffs = ['swinging_strike', 'swinging_strike_blocked', 'missed_bunt']
-                            
-                            h2h_bbe = h2h_df[h2h_df['description'].isin(in_play)].copy()
-                            h2h_swings = h2h_df[h2h_df['description'].isin(swings)].copy()
-                            
-                            total_pitches = len(h2h_df)
-                            avg_ev = h2h_bbe['launch_speed'].mean() if not h2h_bbe.empty else 0
-                            hard_hits = (h2h_bbe['launch_speed'] >= 95).sum() if not h2h_bbe.empty else 0
-                            bbe_count = len(h2h_bbe)
-                            hard_hit_pct = (hard_hits / bbe_count * 100) if bbe_count > 0 else 0
-                            
-                            whiff_count = h2h_swings['description'].isin(whiffs).sum()
-                            swing_count = len(h2h_swings)
-                            whiff_pct = (whiff_count / swing_count * 100) if swing_count > 0 else 0
+                        total_pitches = len(data)
+                        avg_ev = h2h_bbe['launch_speed'].mean() if not h2h_bbe.empty else 0
+                        hard_hits = (h2h_bbe['launch_speed'] >= 95).sum() if not h2h_bbe.empty else 0
+                        bbe_count = len(h2h_bbe)
+                        hard_hit_pct = (hard_hits / bbe_count * 100) if bbe_count > 0 else 0
+                        
+                        whiff_count = h2h_swings['description'].isin(whiffs).sum()
+                        swing_count = len(h2h_swings)
+                        whiff_pct = (whiff_count / swing_count * 100) if swing_count > 0 else 0
 
-                            at_bats = h2h_df.dropna(subset=['events']).copy()
-                            if not at_bats.empty:
+                        # 1. Historical Box Score
+                        st.markdown("##### 📜 Historical Box Score")
+                        at_bats = data.dropna(subset=['events']).copy()
+                        if not at_bats.empty:
+                            if player_type == "Batter":
                                 hits = at_bats['events'].isin(['single', 'double', 'triple', 'home_run']).sum()
                                 hrs = (at_bats['events'] == 'home_run').sum()
                                 ks = at_bats['events'].isin(['strikeout', 'strikeout_double_play']).sum()
                                 official_abs = (~at_bats['events'].isin(['walk', 'hit_by_pitch', 'sac_fly', 'sac_bunt'])).sum()
-                                
                                 ba = (hits / official_abs) if official_abs > 0 else 0.0
                                 
-                                st.markdown("##### 📜 Historical Box Score")
                                 t1, t2, t3, t4 = st.columns(4)
                                 t1.metric("Hits / ABs", f"{hits} / {official_abs}")
                                 t2.metric("Batting Avg", f".{int(ba * 1000):03d}")
                                 t3.metric("Home Runs", f"{hrs}")
                                 t4.metric("Strikeouts", f"{ks}")
-                                st.markdown("<br>", unsafe_allow_html=True)
-                            
-                            st.markdown("##### 🔬 Underlying Physics")
-                            st.caption(f"**Sample Size:** {total_pitches} total pitches seen in this specific matchup.")
-                            
-                            h1, h2, h3 = st.columns(3)
-                            h1.metric("H2H Avg Exit Velo", f"{avg_ev:.1f} mph" if avg_ev > 0 else "N/A")
-                            h2.metric("H2H Hard Hit %", f"{hard_hit_pct:.1f}%" if bbe_count > 0 else "N/A")
-                            h3.metric("H2H Whiff %", f"{whiff_pct:.1f}%" if swing_count > 0 else "N/A")
-                            
-                            if bbe_count >= 3:
-                                if hard_hit_pct >= 50.0 and whiff_pct <= 25.0:
-                                    st.success(f"🔥 **Elite Matchup:** The batter sees the ball incredibly well in this matchup, making frequent, high-quality contact.")
-                                elif hard_hit_pct < 30.0 and whiff_pct >= 35.0:
-                                    st.error(f"⚠️ **Bad Matchup:** The batter struggles heavily in this matchup (high swing & miss, weak contact).")
                             else:
-                                st.info("No matchup data found in this timeframe.")
+                                batters_faced = len(at_bats)
+                                ks = at_bats['events'].isin(['strikeout', 'strikeout_double_play']).sum()
+                                hits_allowed = at_bats['events'].isin(['single', 'double', 'triple', 'home_run']).sum()
+                                walks = (at_bats['events'] == 'walk').sum()
+                                
+                                t1, t2, t3, t4 = st.columns(4)
+                                t1.metric("Batters Faced", batters_faced)
+                                t2.metric("Strikeouts", ks)
+                                t3.metric("Hits Allowed", hits_allowed)
+                                t4.metric("Walks Allowed", walks)
+                        
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        
+                        # 2. Underlying Physics
+                        st.markdown("##### 🔬 Underlying Physics")
+                        st.caption(f"**Sample Size:** {total_pitches} total pitches seen in this specific matchup.")
+                        
+                        h1, h2, h3 = st.columns(3)
+                        h1.metric("H2H Avg Exit Velo", f"{avg_ev:.1f} mph" if avg_ev > 0 else "N/A")
+                        h2.metric("H2H Hard Hit %", f"{hard_hit_pct:.1f}%" if bbe_count > 0 else "N/A")
+                        h3.metric("H2H Whiff %", f"{whiff_pct:.1f}%" if swing_count > 0 else "N/A")
+                        
+                        # 3. Recent Game Logs
+                        st.markdown("---")
+                        st.markdown("##### 📅 Recent Game Logs (H2H)")
+                        if player_type == "Batter":
+                            events_df = data.dropna(subset=['events']).copy()
+                            if not events_df.empty:
+                                events_df['TB'] = events_df['events'].map({'single': 1, 'double': 2, 'triple': 3, 'home_run': 4}).fillna(0)
+                                events_df['Hit'] = events_df['events'].isin(['single', 'double', 'triple', 'home_run']).astype(int)
+                                events_df['HR'] = (events_df['events'] == 'home_run').astype(int)
+                                game_logs = events_df.groupby('game_date').agg(TB=('TB', 'sum'), Hits=('Hit', 'sum'), HRs=('HR', 'sum')).reset_index().sort_values('game_date', ascending=False)
+                                st.dataframe(game_logs, hide_index=True)
+                        else:
+                            events_df = data.dropna(subset=['events']).copy()
+                            if not events_df.empty:
+                                events_df['K'] = (events_df['events'] == 'strikeout').astype(int)
+                                game_logs = events_df.groupby('game_date').agg(Strikeouts=('K', 'sum')).reset_index().sort_values('game_date', ascending=False)
+                                st.dataframe(game_logs, hide_index=True)
+
+                        # 4. Quality of Contact (Batter) OR Advanced Pitcher Diagnostics (Pitcher)
+                        st.markdown("---")
+                        if player_type == "Batter":
+                            st.markdown("##### 💥 Quality of Contact")
+                            bbe_df = data[data['description'].isin(in_play)].dropna(subset=['launch_speed', 'launch_angle']).copy()
+                            if not bbe_df.empty:
+                                total_bbe = len(bbe_df)
+                                bbe_df['Hard_Hit'] = (bbe_df['launch_speed'] >= 95).astype(int)
+                                bbe_df['Barrel'] = ((bbe_df['launch_speed'] >= 98) & (bbe_df['launch_angle'] >= 26) & (bbe_df['launch_angle'] <= 30)).astype(int)
+                                
+                                c1, c2, c3, c4 = st.columns(4)
+                                c1.metric("Avg Exit Velo", f"{bbe_df['launch_speed'].mean():.1f} mph")
+                                c2.metric("Max Exit Velo", f"{bbe_df['launch_speed'].max():.1f} mph")
+                                c3.metric("Hard Hit %", f"{(bbe_df['Hard_Hit'].sum() / total_bbe) * 100:.1f}%")
+                                c4.metric("Barrel %", f"{(bbe_df['Barrel'].sum() / total_bbe) * 100:.1f}%")
+                            else:
+                                st.info("Not enough batted ball data in this matchup.")
+                        else:
+                            st.markdown("##### 📈 Advanced Pitcher Diagnostics")
+                            pitch_df = data.dropna(subset=['pitch_name', 'description']).copy()
+                            if not pitch_df.empty:
+                                called_strikes = ['called_strike']
+                                pitch_df['is_swing'] = pitch_df['description'].isin(swings).astype(int)
+                                pitch_df['is_whiff'] = pitch_df['description'].isin(whiffs).astype(int)
+                                pitch_df['is_csw'] = pitch_df['description'].isin(whiffs + called_strikes).astype(int)
+                                
+                                diag_table = pitch_df.groupby('pitch_name').agg(
+                                    Total_Pitches=('pitch_name', 'count'),
+                                    Swings=('is_swing', 'sum'),
+                                    Whiffs=('is_whiff', 'sum'),
+                                    CSW=('is_csw', 'sum')
+                                ).reset_index()
+                                
+                                diag_table['Whiff%'] = (diag_table['Whiffs'] / diag_table['Swings'].replace(0, np.nan)).fillna(0) * 100
+                                diag_table['CSW%'] = (diag_table['CSW'] / diag_table['Total_Pitches']).fillna(0) * 100
+                                diag_table = diag_table.sort_values(by='Total_Pitches', ascending=False)
+                                
+                                diag_table['Whiff%'] = diag_table['Whiff%'].map("{:.1f}%".format)
+                                diag_table['CSW%'] = diag_table['CSW%'].map("{:.1f}%".format)
+                                
+                                st.dataframe(diag_table[['pitch_name', 'Total_Pitches', 'Whiff%', 'CSW%']].rename(columns={'pitch_name': 'Pitch Type'}), hide_index=True)
+
+                        # 5. Performance by Pitch Type Seen (Batter)
+                        if player_type == "Batter":
+                            st.markdown("---")
+                            st.markdown("##### ⚾ Performance by Pitch Type (Seen)")
+                            at_bats_p = data.dropna(subset=['events']).copy()
+                            if not at_bats_p.empty:
+                                at_bats_p['Hit'] = at_bats_p['events'].isin(['single', 'double', 'triple', 'home_run'])
+                                at_bats_p['Home_Run'] = at_bats_p['events'] == 'home_run'
+                                match_table = at_bats_p.groupby('pitch_name').agg(
+                                    Total_Seen=('events', 'count'),
+                                    Hits=('Hit', 'sum'),
+                                    Home_Runs=('Home_Run', 'sum')
+                                ).reset_index().rename(columns={'pitch_name': 'Pitch Type', 'Total_Seen': 'Plate Appearances'}).sort_values(by='Plate Appearances', ascending=False)
+                                st.dataframe(match_table, hide_index=True)
+
+                    # ==========================================================
+                    # MODE B: MACRO PLAYER PROFILE (No Opponent Specified)
+                    # ==========================================================
+                    else:
+                        # --- ROLLING PROP HIT RATES ---
+                        st.markdown("---")
+                        st.subheader("Rolling Prop Hit Rates (L5 / L10 / L20)")
+                        
+                        events_df = data.dropna(subset=['events']).copy()
+                        
+                        if not events_df.empty:
+                            st.caption("Adjust the targets below to match current sportsbook lines.")
                             
+                            if player_type == "Batter":
+                                events_df['TB'] = events_df['events'].map({'single': 1, 'double': 2, 'triple': 3, 'home_run': 4}).fillna(0)
+                                events_df['Hit'] = events_df['events'].isin(['single', 'double', 'triple', 'home_run']).astype(int)
+                                events_df['HR'] = (events_df['events'] == 'home_run').astype(int)
+                                
+                                game_logs = events_df.groupby('game_date').agg(
+                                    TB=('TB', 'sum'),
+                                    Hits=('Hit', 'sum'),
+                                    HRs=('HR', 'sum')
+                                ).reset_index().sort_values('game_date', ascending=False)
+                                
+                                col_h, col_tb, col_hr = st.columns(3)
+                                t_hits = col_h.number_input("Hits", min_value=1, max_value=5, value=1)
+                                t_tb = col_tb.number_input("Total Bases", min_value=1, max_value=10, value=2)
+                                t_hr = col_hr.number_input("Home Runs", min_value=1, max_value=4, value=1)
+                                
+                                props = [
+                                    {"Prop": f"{t_hits}+ Hits", "Column": "Hits", "Target": t_hits},
+                                    {"Prop": f"{t_tb}+ Total Bases", "Column": "TB", "Target": t_tb},
+                                    {"Prop": f"{t_hr}+ Home Runs", "Column": "HRs", "Target": t_hr}
+                                ]
+                            else:
+                                events_df['K'] = (events_df['events'] == 'strikeout').astype(int)
+                                game_logs = events_df.groupby('game_date').agg(
+                                    Strikeouts=('K', 'sum')
+                                ).reset_index().sort_values('game_date', ascending=False)
+                                
+                                col_k1, col_k2 = st.columns(2)
+                                t_k1 = col_k1.number_input("Main Strikeout Line", min_value=1, max_value=20, value=5)
+                                t_k2 = col_k2.number_input("Alt Strikeout Line", min_value=1, max_value=20, value=7)
+                                
+                                props = [
+                                    {"Prop": f"{t_k1}+ Strikeouts", "Column": "Strikeouts", "Target": t_k1},
+                                    {"Prop": f"{t_k2}+ Strikeouts", "Column": "Strikeouts", "Target": t_k2},
+                                ]
+                                
+                            if not game_logs.empty:
+                                def prob_to_american(p):
+                                    if p <= 0: return "N/A"
+                                    if p >= 1: return "-∞"
+                                    if p >= 0.5:
+                                        return f"-{int(round((p / (1 - p)) * 100))}"
+                                    else:
+                                        return f"+{int(round(((1 - p) / p) * 100))}"
+
+                                def american_to_prob(odds):
+                                    try:
+                                        odds = float(odds)
+                                        if odds < 0:
+                                            return abs(odds) / (abs(odds) + 100.0)
+                                        else:
+                                            return 100.0 / (odds + 100.0)
+                                    except Exception:
+                                        return None
+
+                                rates_data = []
+                                for p in props:
+                                    col = p["Column"]
+                                    target = p["Target"]
+                                    
+                                    p5 = (game_logs.head(5)[col] >= target).mean() if len(game_logs) >= 5 else None
+                                    p10 = (game_logs.head(10)[col] >= target).mean() if len(game_logs) >= 10 else None
+                                    p20 = (game_logs.head(20)[col] >= target).mean() if len(game_logs) >= 20 else None
+                                    
+                                    l5_str = f"{p5 * 100:.0f}% ({prob_to_american(p5)})" if p5 is not None else "N/A (<5 G)"
+                                    l10_str = f"{p10 * 100:.0f}% ({prob_to_american(p10)})" if p10 is not None else "N/A (<10 G)"
+                                    l20_str = f"{p20 * 100:.0f}% ({prob_to_american(p20)})" if p20 is not None else "N/A (<20 G)"
+                                    
+                                    rates_data.append({
+                                        "Prop": p["Prop"], 
+                                        "L5 (Fair Odds)": l5_str, 
+                                        "L10 (Fair Odds)": l10_str, 
+                                        "L20 (Fair Odds)": l20_str,
+                                        "p10_raw": p10
+                                    })
+                                    
+                                rates_df = pd.DataFrame(rates_data)
+                                st.dataframe(rates_df[["Prop", "L5 (Fair Odds)", "L10 (Fair Odds)", "L20 (Fair Odds)"]], hide_index=True)
+
+                        # --- BOOKMAKER EDGE & +EV CALCULATOR ---
+                        if 'game_logs' in locals() and not game_logs.empty and 'props' in locals():
+                            st.markdown("---")
                             st.markdown("##### 💰 Bookmaker Edge & +EV Calculator")
                             st.caption("Compare your modeled win probability against the sportsbook line to find mathematical edge.")
                             
                             ev_col1, ev_col2, ev_col3 = st.columns([2, 1, 1])
                             
                             prop_options = [p["Prop"] for p in props]
-                            selected_prop = ev_col1.selectbox("Select Target Prop", prop_options)
-                            sample_window = ev_col2.selectbox("Model Baseline", ["L10", "L5", "L20"])
-                            book_odds = ev_col3.number_input("Sportsbook Odds (American)", value=-110, step=5)
+                            selected_prop = ev_col1.selectbox("Select Target Prop", prop_options, key="macro_prop_sel")
+                            sample_window = ev_col2.selectbox("Model Baseline", ["L10", "L5", "L20"], key="macro_sample_win")
+                            book_odds = ev_col3.number_input("Sportsbook Odds (American)", value=-110, step=5, key="macro_book_odds")
                             
                             prop_idx = prop_options.index(selected_prop)
                             target_col = props[prop_idx]["Column"]
@@ -321,7 +414,7 @@ with tab1:
                                     else:
                                         st.error(f"⚠️ **-EV Spot:** The book line ({book_odds:+d}) requires a {implied_book_prob*100:.1f}% win rate, but the current baseline is {my_prob*100:.1f}%.")
                                         
-                                    if st.button("➕ Save to Daily Edge Report"):
+                                    if st.button("➕ Save to Daily Edge Report", key="macro_save_edge"):
                                         st.session_state.edge_report.append({
                                             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                             "Player": f"{first_name} {last_name}",
@@ -333,189 +426,182 @@ with tab1:
                                             "EV ($100)": f"${ev:+.2f}"
                                         })
                                         st.rerun()
+
+                        # --- QUALITY OF CONTACT ---
+                        if player_type == "Batter":
+                            st.markdown("---")
+                            st.subheader("Quality of Contact (Batted Balls)")
+                            
+                            in_play = ['hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score']
+                            bbe_df = data[data['description'].isin(in_play)].dropna(subset=['launch_speed', 'launch_angle']).copy()
+                            
+                            if not bbe_df.empty:
+                                total_bbe = len(bbe_df)
+                                bbe_df['Hard_Hit'] = (bbe_df['launch_speed'] >= 95).astype(int)
+                                bbe_df['Barrel'] = ((bbe_df['launch_speed'] >= 98) & 
+                                                   (bbe_df['launch_angle'] >= 26) & 
+                                                   (bbe_df['launch_angle'] <= 30)).astype(int)
+                                
+                                c1, c2, c3, c4 = st.columns(4)
+                                c1.metric("Avg Exit Velo", f"{bbe_df['launch_speed'].mean():.1f} mph")
+                                c2.metric("Max Exit Velo", f"{bbe_df['launch_speed'].max():.1f} mph")
+                                c3.metric("Hard Hit %", f"{(bbe_df['Hard_Hit'].sum() / total_bbe) * 100:.1f}%")
+                                c4.metric("Barrel %", f"{(bbe_df['Barrel'].sum() / total_bbe) * 100:.1f}%")
                             else:
-                                st.info(f"Need at least {sample_n} games of sample data to run EV calculation.")
-                            
-                            with st.expander("View Recent Game Logs"):
-                                st.dataframe(game_logs.head(20), hide_index=True)
+                                st.info("Not enough batted ball data to calculate Quality of Contact.")
 
-                    # --- QUALITY OF CONTACT ---
-                    if player_type == "Batter":
-                        st.markdown("---")
-                        st.subheader("Quality of Contact (Batted Balls)")
-                        
-                        in_play = ['hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score']
-                        bbe_df = data[data['description'].isin(in_play)].dropna(subset=['launch_speed', 'launch_angle']).copy()
-                        
-                        if not bbe_df.empty:
-                            total_bbe = len(bbe_df)
-                            bbe_df['Hard_Hit'] = (bbe_df['launch_speed'] >= 95).astype(int)
-                            bbe_df['Barrel'] = ((bbe_df['launch_speed'] >= 98) & 
-                                               (bbe_df['launch_angle'] >= 26) & 
-                                               (bbe_df['launch_angle'] <= 30)).astype(int)
+                        # --- EXPECTED VS ACTUAL REGRESSION ---
+                        if player_type == "Batter":
+                            st.markdown("---")
+                            st.subheader("Luck Regression (Expected vs Actual)")
+                            st.caption("Identifies 'Buy Low' or 'Sell High' candidates by comparing actual results to Statcast's expected metrics.")
                             
-                            c1, c2, c3, c4 = st.columns(4)
-                            c1.metric("Avg Exit Velo", f"{bbe_df['launch_speed'].mean():.1f} mph")
-                            c2.metric("Max Exit Velo", f"{bbe_df['launch_speed'].max():.1f} mph")
-                            c3.metric("Hard Hit %", f"{(bbe_df['Hard_Hit'].sum() / total_bbe) * 100:.1f}%")
-                            c4.metric("Barrel %", f"{(bbe_df['Barrel'].sum() / total_bbe) * 100:.1f}%")
+                            ab_events = ['single', 'double', 'triple', 'home_run', 'field_out', 'grounded_into_dp', 
+                                         'force_out', 'fielders_choice', 'field_error', 'strikeout', 'strikeout_double_play']
+                            ab_df = data[data['events'].isin(ab_events)].copy()
+                            
+                            if not ab_df.empty:
+                                ab_df['Hit'] = ab_df['events'].isin(['single', 'double', 'triple', 'home_run']).astype(int)
+                                ab_df['TB'] = ab_df['events'].map({'single': 1, 'double': 2, 'triple': 3, 'home_run': 4}).fillna(0)
+                                
+                                actual_ba = ab_df['Hit'].mean()
+                                actual_slg = ab_df['TB'].mean()
+                                
+                                ab_df['xBA'] = ab_df['estimated_ba_using_speedangle'].fillna(0)
+                                ab_df['xSLG'] = ab_df['estimated_slg_using_speedangle'].fillna(0)
+                                
+                                xba = ab_df['xBA'].mean()
+                                xslg = ab_df['xSLG'].mean()
+                                
+                                ba_diff = xba - actual_ba
+                                slg_diff = xslg - actual_slg
+                                
+                                r1, r2, r3, r4 = st.columns(4)
+                                r1.metric("Actual BA", f".{str(actual_ba).split('.')[1][:3].ljust(3, '0')}" if actual_ba > 0 else ".000")
+                                r2.metric("Expected BA (xBA)", f".{str(xba).split('.')[1][:3].ljust(3, '0')}" if xba > 0 else ".000", delta=f"{ba_diff:+.3f} Diff")
+                                r3.metric("Actual SLG", f".{str(actual_slg).split('.')[1][:3].ljust(3, '0')}" if actual_slg > 0 else ".000")
+                                r4.metric("Expected SLG (xSLG)", f".{str(xslg).split('.')[1][:3].ljust(3, '0')}" if xslg > 0 else ".000", delta=f"{slg_diff:+.3f} Diff")
+                                
+                                if ba_diff > 0.040:
+                                    st.success(f"📈 **Buy Low Alert:** Hitter is batting **.{str(actual_ba).split('.')[1][:3]}** but making contact well enough to bat **.{str(xba).split('.')[1][:3]}**.")
+                                elif ba_diff < -0.040:
+                                    st.error(f"📉 **Sell High Alert:** Hitter is batting **.{str(actual_ba).split('.')[1][:3]}** but contact quality implies they should be batting **.{str(xba).split('.')[1][:3]}**.")
+                                else:
+                                    st.info("⚖️ **Balanced Profile:** The hitter's actual outcomes closely match their contact quality.")
+
+                        # --- PARK FACTORS ---
+                        if player_type == "Batter":
+                            st.markdown("---")
+                            st.subheader("🏟️ Enterprise Park Factors (Handedness Splits)")
+                            
+                            b_hand = data['stand'].mode()[0] if 'stand' in data.columns and not data['stand'].empty else 'R'
+                            hand_label = "Left-Handed" if b_hand == 'L' else "Right-Handed"
+                            
+                            park_factors_adv = {
+                                "Average / Neutral Park": {'L': {'Hit': 100, 'HR': 100}, 'R': {'Hit': 100, 'HR': 100}},
+                                "Coors Field (COL)": {'L': {'Hit': 113, 'HR': 105}, 'R': {'Hit': 113, 'HR': 110}},
+                                "Great American Ball Park (CIN)": {'L': {'Hit': 104, 'HR': 136}, 'R': {'Hit': 100, 'HR': 121}},
+                                "Fenway Park (BOS)": {'L': {'Hit': 107, 'HR': 85}, 'R': {'Hit': 108, 'HR': 95}}, 
+                                "Yankee Stadium (NYY)": {'L': {'Hit': 97, 'HR': 122}, 'R': {'Hit': 98, 'HR': 103}},
+                                "Dodger Stadium (LAD)": {'L': {'Hit': 100, 'HR': 112}, 'R': {'Hit': 98, 'HR': 115}},
+                                "Oracle Park (SF)": {'L': {'Hit': 96, 'HR': 84}, 'R': {'Hit': 97, 'HR': 91}},
+                                "Citi Field (NYM)": {'L': {'Hit': 97, 'HR': 90}, 'R': {'Hit': 95, 'HR': 94}}
+                            }
+                            
+                            st.info(f"Swing Profile Detected: **{hand_label}**")
+                            park_sel = st.selectbox("Select Upcoming Venue", list(park_factors_adv.keys()), key="macro_park_sel")
+                            
+                            hit_factor = park_factors_adv[park_sel][b_hand]['Hit'] / 100.0
+                            hr_factor = park_factors_adv[park_sel][b_hand]['HR'] / 100.0
+                            
+                            ab_df_park = data[data['events'].isin(ab_events)].copy() if 'ab_events' in locals() else pd.DataFrame()
+                            if not ab_df_park.empty:
+                                base_xba = ab_df_park['estimated_ba_using_speedangle'].fillna(0).mean()
+                                base_xslg = ab_df_park['estimated_slg_using_speedangle'].fillna(0).mean()
+                                
+                                adj_xba = base_xba * hit_factor
+                                adj_xslg = base_xslg * ((hit_factor * 0.4) + (hr_factor * 0.6))
+                                
+                                pk1, pk2 = st.columns(2)
+                                pk1.metric(f"Park-Adjusted xBA", f".{str(adj_xba).split('.')[1][:3].ljust(3, '0')}" if adj_xba > 0 else ".000", delta=f"{adj_xba - base_xba:+.3f}")
+                                pk2.metric(f"Park-Adjusted xSLG", f".{str(adj_xslg).split('.')[1][:3].ljust(3, '0')}" if adj_xslg > 0 else ".000", delta=f"{adj_xslg - base_xslg:+.3f}")
+
+                        # --- PITCH DIAGNOSTICS ---
+                        st.markdown("---")
+                        if player_type == "Batter":
+                            st.subheader("Performance by Pitch Type (Seen)")
+                            at_bats = data.dropna(subset=['events']).copy()
+                            if not at_bats.empty:
+                                at_bats['Hit'] = at_bats['events'].isin(['single', 'double', 'triple', 'home_run'])
+                                at_bats['Home_Run'] = at_bats['events'] == 'home_run'
+                                matchup_table = at_bats.groupby('pitch_name').agg(
+                                    Total_Seen=('events', 'count'),
+                                    Hits=('Hit', 'sum'),
+                                    Home_Runs=('Home_Run', 'sum')
+                                ).reset_index().rename(columns={'pitch_name': 'Pitch Type', 'Total_Seen': 'Plate Appearances'}).sort_values(by='Plate Appearances', ascending=False)
+                                st.dataframe(matchup_table, hide_index=True)
                         else:
-                            st.info("Not enough batted ball data to calculate Quality of Contact.")
+                            st.subheader("Advanced Pitcher Diagnostics")
+                            pitch_df = data.dropna(subset=['pitch_name', 'description']).copy()
+                            if not pitch_df.empty:
+                                swings = ['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score']
+                                whiffs = ['swinging_strike', 'swinging_strike_blocked', 'missed_bunt']
+                                called_strikes = ['called_strike']
+                                
+                                pitch_df['is_swing'] = pitch_df['description'].isin(swings).astype(int)
+                                pitch_df['is_whiff'] = pitch_df['description'].isin(whiffs).astype(int)
+                                pitch_df['is_csw'] = pitch_df['description'].isin(whiffs + called_strikes).astype(int)
+                                
+                                diag_table = pitch_df.groupby('pitch_name').agg(
+                                    Total_Pitches=('pitch_name', 'count'),
+                                    Swings=('is_swing', 'sum'),
+                                    Whiffs=('is_whiff', 'sum'),
+                                    CSW=('is_csw', 'sum')
+                                ).reset_index()
+                                
+                                diag_table['Whiff%'] = (diag_table['Whiffs'] / diag_table['Swings'].replace(0, np.nan)).fillna(0) * 100
+                                diag_table['CSW%'] = (diag_table['CSW'] / diag_table['Total_Pitches']).fillna(0) * 100
+                                diag_table = diag_table.sort_values(by='Total_Pitches', ascending=False)
+                                
+                                diag_table['Whiff%'] = diag_table['Whiff%'].map("{:.1f}%".format)
+                                diag_table['CSW%'] = diag_table['CSW%'].map("{:.1f}%".format)
+                                
+                                st.dataframe(diag_table[['pitch_name', 'Total_Pitches', 'Whiff%', 'CSW%']].rename(columns={'pitch_name': 'Pitch Type'}), hide_index=True)
 
-                    # --- EXPECTED VS ACTUAL REGRESSION ---
-                    if player_type == "Batter":
+                        # --- INNING SPLITS ---
                         st.markdown("---")
-                        st.subheader("Luck Regression (Expected vs Actual)")
-                        st.caption("Identifies 'Buy Low' or 'Sell High' candidates by comparing actual results to Statcast's expected metrics.")
+                        st.subheader("Fatigue & Inning Splits (NRFI / Pitch Outs)")
+                        pitch_data = data.copy()
+                        pitch_data['pa_idx'] = pitch_data.groupby('game_date')['at_bat_number'].transform(lambda x: x.rank(method='dense'))
+                        pitch_data['tto_raw'] = np.ceil(pitch_data['pa_idx'] / 9.0)
+                        pitch_data['TTO'] = pitch_data['tto_raw'].map({1.0: "1st Time", 2.0: "2nd Time", 3.0: "3rd+ Time"}).fillna("3rd+ Time")
                         
-                        ab_events = ['single', 'double', 'triple', 'home_run', 'field_out', 'grounded_into_dp', 
-                                     'force_out', 'fielders_choice', 'field_error', 'strikeout', 'strikeout_double_play']
-                        ab_df = data[data['events'].isin(ab_events)].copy()
+                        pa_events = ['strikeout', 'walk', 'single', 'double', 'triple', 'home_run', 'field_out', 'grounded_into_dp', 'force_out', 'fielders_choice', 'field_error', 'hit_by_pitch']
+                        pa_df = pitch_data[pitch_data['events'].isin(pa_events)].copy()
                         
-                        if not ab_df.empty:
-                            ab_df['Hit'] = ab_df['events'].isin(['single', 'double', 'triple', 'home_run']).astype(int)
-                            ab_df['TB'] = ab_df['events'].map({'single': 1, 'double': 2, 'triple': 3, 'home_run': 4}).fillna(0)
+                        if not pa_df.empty:
+                            pa_df['is_k'] = (pa_df['events'] == 'strikeout').astype(int)
+                            pa_df['is_on_base'] = pa_df['events'].isin(['single', 'double', 'triple', 'home_run', 'walk', 'hit_by_pitch']).astype(int)
                             
-                            actual_ba = ab_df['Hit'].mean()
-                            actual_slg = ab_df['TB'].mean()
-                            
-                            ab_df['xBA'] = ab_df['estimated_ba_using_speedangle'].fillna(0)
-                            ab_df['xSLG'] = ab_df['estimated_slg_using_speedangle'].fillna(0)
-                            
-                            xba = ab_df['xBA'].mean()
-                            xslg = ab_df['xSLG'].mean()
-                            
-                            ba_diff = xba - actual_ba
-                            slg_diff = xslg - actual_slg
-                            
-                            r1, r2, r3, r4 = st.columns(4)
-                            r1.metric("Actual BA", f".{str(actual_ba).split('.')[1][:3].ljust(3, '0')}" if actual_ba > 0 else ".000")
-                            r2.metric("Expected BA (xBA)", f".{str(xba).split('.')[1][:3].ljust(3, '0')}" if xba > 0 else ".000", delta=f"{ba_diff:+.3f} Diff")
-                            r3.metric("Actual SLG", f".{str(actual_slg).split('.')[1][:3].ljust(3, '0')}" if actual_slg > 0 else ".000")
-                            r4.metric("Expected SLG (xSLG)", f".{str(xslg).split('.')[1][:3].ljust(3, '0')}" if xslg > 0 else ".000", delta=f"{slg_diff:+.3f} Diff")
-                            
-                            if ba_diff > 0.040:
-                                st.success(f"📈 **Buy Low Alert:** Hitter is batting **.{str(actual_ba).split('.')[1][:3]}** but making contact well enough to bat **.{str(xba).split('.')[1][:3]}**.")
-                            elif ba_diff < -0.040:
-                                st.error(f"📉 **Sell High Alert:** Hitter is batting **.{str(actual_ba).split('.')[1][:3]}** but contact quality implies they should be batting **.{str(xba).split('.')[1][:3]}**.")
-                            else:
-                                st.info("⚖️ **Balanced Profile:** The hitter's actual outcomes closely match their contact quality.")
-                        else:
-                            st.info("Not enough At-Bats to calculate regression metrics.")
-
-                    # --- PARK FACTORS ---
-                    if player_type == "Batter":
-                        st.markdown("---")
-                        st.subheader("🏟️ Enterprise Park Factors (Handedness Splits)")
-                        
-                        b_hand = data['stand'].mode()[0] if 'stand' in data.columns and not data['stand'].empty else 'R'
-                        hand_label = "Left-Handed" if b_hand == 'L' else "Right-Handed"
-                        
-                        park_factors_adv = {
-                            "Average / Neutral Park": {'L': {'Hit': 100, 'HR': 100}, 'R': {'Hit': 100, 'HR': 100}},
-                            "Coors Field (COL)": {'L': {'Hit': 113, 'HR': 105}, 'R': {'Hit': 113, 'HR': 110}},
-                            "Great American Ball Park (CIN)": {'L': {'Hit': 104, 'HR': 136}, 'R': {'Hit': 100, 'HR': 121}},
-                            "Fenway Park (BOS)": {'L': {'Hit': 107, 'HR': 85}, 'R': {'Hit': 108, 'HR': 95}}, 
-                            "Yankee Stadium (NYY)": {'L': {'Hit': 97, 'HR': 122}, 'R': {'Hit': 98, 'HR': 103}},
-                            "Dodger Stadium (LAD)": {'L': {'Hit': 100, 'HR': 112}, 'R': {'Hit': 98, 'HR': 115}},
-                            "Oracle Park (SF)": {'L': {'Hit': 96, 'HR': 84}, 'R': {'Hit': 97, 'HR': 91}},
-                            "Citi Field (NYM)": {'L': {'Hit': 97, 'HR': 90}, 'R': {'Hit': 95, 'HR': 94}}
-                        }
-                        
-                        st.info(f"Swing Profile Detected: **{hand_label}**")
-                        park_sel = st.selectbox("Select Upcoming Venue", list(park_factors_adv.keys()))
-                        
-                        hit_factor = park_factors_adv[park_sel][b_hand]['Hit'] / 100.0
-                        hr_factor = park_factors_adv[park_sel][b_hand]['HR'] / 100.0
-                        
-                        ab_df_park = data[data['events'].isin(ab_events)].copy() if 'ab_events' in locals() else pd.DataFrame()
-                        if not ab_df_park.empty:
-                            base_xba = ab_df_park['estimated_ba_using_speedangle'].fillna(0).mean()
-                            base_xslg = ab_df_park['estimated_slg_using_speedangle'].fillna(0).mean()
-                            
-                            adj_xba = base_xba * hit_factor
-                            adj_xslg = base_xslg * ((hit_factor * 0.4) + (hr_factor * 0.6))
-                            
-                            pk1, pk2 = st.columns(2)
-                            pk1.metric(f"Park-Adjusted xBA", f".{str(adj_xba).split('.')[1][:3].ljust(3, '0')}" if adj_xba > 0 else ".000", delta=f"{adj_xba - base_xba:+.3f}")
-                            pk2.metric(f"Park-Adjusted xSLG", f".{str(adj_xslg).split('.')[1][:3].ljust(3, '0')}" if adj_xslg > 0 else ".000", delta=f"{adj_xslg - base_xslg:+.3f}")
-
-                    # --- PITCH DIAGNOSTICS ---
-                    st.markdown("---")
-                    if player_type == "Batter":
-                        st.subheader("Performance by Pitch Type (Seen)")
-                        at_bats = data.dropna(subset=['events']).copy()
-                        if not at_bats.empty:
-                            at_bats['Hit'] = at_bats['events'].isin(['single', 'double', 'triple', 'home_run'])
-                            at_bats['Home_Run'] = at_bats['events'] == 'home_run'
-                            matchup_table = at_bats.groupby('pitch_name').agg(
-                                Total_Seen=('events', 'count'),
-                                Hits=('Hit', 'sum'),
-                                Home_Runs=('Home_Run', 'sum')
-                            ).reset_index().rename(columns={'pitch_name': 'Pitch Type', 'Total_Seen': 'Plate Appearances'}).sort_values(by='Plate Appearances', ascending=False)
-                            st.dataframe(matchup_table, hide_index=True)
-                    else:
-                        st.subheader("Advanced Pitcher Diagnostics")
-                        pitch_df = data.dropna(subset=['pitch_name', 'description']).copy()
-                        if not pitch_df.empty:
-                            swings = ['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score']
-                            whiffs = ['swinging_strike', 'swinging_strike_blocked', 'missed_bunt']
-                            called_strikes = ['called_strike']
-                            
-                            pitch_df['is_swing'] = pitch_df['description'].isin(swings).astype(int)
-                            pitch_df['is_whiff'] = pitch_df['description'].isin(whiffs).astype(int)
-                            pitch_df['is_csw'] = pitch_df['description'].isin(whiffs + called_strikes).astype(int)
-                            
-                            diag_table = pitch_df.groupby('pitch_name').agg(
-                                Total_Pitches=('pitch_name', 'count'),
-                                Swings=('is_swing', 'sum'),
-                                Whiffs=('is_whiff', 'sum'),
-                                CSW=('is_csw', 'sum')
-                            ).reset_index()
-                            
-                            diag_table['Whiff%'] = (diag_table['Whiffs'] / diag_table['Swings'].replace(0, np.nan)).fillna(0) * 100
-                            diag_table['CSW%'] = (diag_table['CSW'] / diag_table['Total_Pitches']).fillna(0) * 100
-                            diag_table = diag_table.sort_values(by='Total_Pitches', ascending=False)
-                            
-                            diag_table['Whiff%'] = diag_table['Whiff%'].map("{:.1f}%".format)
-                            diag_table['CSW%'] = diag_table['CSW%'].map("{:.1f}%".format)
-                            
-                            st.dataframe(diag_table[['pitch_name', 'Total_Pitches', 'Whiff%', 'CSW%']].rename(columns={'pitch_name': 'Pitch Type'}), hide_index=True)
-
-                    # --- INNING SPLITS ---
-                    st.markdown("---")
-                    st.subheader("Fatigue & Inning Splits (NRFI / Pitch Outs)")
-                    pitch_data = data.copy()
-                    pitch_data['pa_idx'] = pitch_data.groupby('game_date')['at_bat_number'].transform(lambda x: x.rank(method='dense'))
-                    pitch_data['tto_raw'] = np.ceil(pitch_data['pa_idx'] / 9.0)
-                    pitch_data['TTO'] = pitch_data['tto_raw'].map({1.0: "1st Time", 2.0: "2nd Time", 3.0: "3rd+ Time"}).fillna("3rd+ Time")
-                    
-                    pa_events = ['strikeout', 'walk', 'single', 'double', 'triple', 'home_run', 'field_out', 'grounded_into_dp', 'force_out', 'fielders_choice', 'field_error', 'hit_by_pitch']
-                    pa_df = pitch_data[pitch_data['events'].isin(pa_events)].copy()
-                    
-                    if not pa_df.empty:
-                        pa_df['is_k'] = (pa_df['events'] == 'strikeout').astype(int)
-                        pa_df['is_on_base'] = pa_df['events'].isin(['single', 'double', 'triple', 'home_run', 'walk', 'hit_by_pitch']).astype(int)
-                        
-                        i1, i2 = st.columns(2)
-                        with i1:
-                            st.markdown("**1st Inning (NRFI Engine)**")
-                            inn1 = pa_df[pa_df['inning'] == 1]
-                            if not inn1.empty:
-                                k_rate_1 = inn1['is_k'].mean() * 100
-                                obp_1 = inn1['is_on_base'].mean() * 100
-                                st.metric("1st Inning K%", f"{k_rate_1:.1f}%")
-                                st.metric("1st Inning OBP", f".{str(obp_1/100).split('.')[1][:3].ljust(3, '0')}" if obp_1 > 0 else ".000")
-                        with i2:
-                            st.markdown("**Times Through Order (Decay)**")
-                            tto_stats = pa_df.groupby('TTO').agg(
-                                Batters_Faced=('events', 'count'),
-                                K_Rate=('is_k', 'mean'),
-                                OBP=('is_on_base', 'mean')
-                            ).reset_index()
-                            tto_stats['K_Rate'] = (tto_stats['K_Rate'] * 100).map("{:.1f}%".format)
-                            tto_stats['OBP'] = tto_stats['OBP'].apply(lambda x: f".{str(x).str.split('.').str[1].str[:3].str.ljust(3, '0')}" if pd.notnull(x) else ".000")
-                            st.dataframe(tto_stats, hide_index=True, use_container_width=True)
+                            i1, i2 = st.columns(2)
+                            with i1:
+                                st.markdown("**1st Inning (NRFI Engine)**")
+                                inn1 = pa_df[pa_df['inning'] == 1]
+                                if not inn1.empty:
+                                    k_rate_1 = inn1['is_k'].mean() * 100
+                                    obp_1 = inn1['is_on_base'].mean() * 100
+                                    st.metric("1st Inning K%", f"{k_rate_1:.1f}%")
+                                    st.metric("1st Inning OBP", f".{str(obp_1/100).split('.')[1][:3].ljust(3, '0')}" if obp_1 > 0 else ".000")
+                            with i2:
+                                st.markdown("**Times Through Order (Decay)**")
+                                tto_stats = pa_df.groupby('TTO').agg(
+                                    Batters_Faced=('events', 'count'),
+                                    K_Rate=('is_k', 'mean'),
+                                    OBP=('is_on_base', 'mean')
+                                ).reset_index()
+                                tto_stats['K_Rate'] = (tto_stats['K_Rate'] * 100).map("{:.1f}%".format)
+                                tto_stats['OBP'] = tto_stats['OBP'].apply(lambda x: f".{str(x).str.split('.').str[1].str[:3].str.ljust(3, '0')}" if pd.notnull(x) else ".000")
+                                st.dataframe(tto_stats, hide_index=True, use_container_width=True)
 
 # ==========================================
 # TAB 2: LIVE TEAM VULNERABILITY BOARD
