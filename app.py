@@ -140,144 +140,70 @@ with tab1:
                         data = data[data['inning_topbot'] == 'Top']
                 
                 if not data.empty:
-                    st.success(f"Successfully pulled data for {first_name} {last_name}!")
+                    st.success(f"Successfully pulled {len(data)} pitches for {first_name} {last_name}!")
                     
                     # ==========================================================
                     # MODE A: H2H MICRO VIEW (Opponent Specified)
                     # ==========================================================
                     if has_h2h:
-                        st.markdown(f"### ⚔️ H2H Matchup: {first_name.title()} {last_name.title()} vs. {opp_first.title()} {opp_last.title()}")
+                        st.markdown(f"### ⚔️ Matchup: vs. {opp_first.title()} {opp_last.title()}")
                         
-                        in_play = ['hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score']
-                        swings = ['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt']
-                        whiffs = ['swinging_strike', 'swinging_strike_blocked', 'missed_bunt']
-                        
-                        h2h_bbe = data[data['description'].isin(in_play)].copy()
-                        h2h_swings = data[data['description'].isin(swings)].copy()
-                        
-                        total_pitches = len(data)
-                        avg_ev = h2h_bbe['launch_speed'].mean() if not h2h_bbe.empty else 0
-                        hard_hits = (h2h_bbe['launch_speed'] >= 95).sum() if not h2h_bbe.empty else 0
-                        bbe_count = len(h2h_bbe)
-                        hard_hit_pct = (hard_hits / bbe_count * 100) if bbe_count > 0 else 0
-                        
-                        whiff_count = h2h_swings['description'].isin(whiffs).sum()
-                        swing_count = len(h2h_swings)
-                        whiff_pct = (whiff_count / swing_count * 100) if swing_count > 0 else 0
+                        h2h_df = data.copy()
+                        if not h2h_df.empty:
+                            in_play = ['hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score']
+                            swings = ['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt']
+                            whiffs = ['swinging_strike', 'swinging_strike_blocked', 'missed_bunt']
+                            
+                            h2h_bbe = h2h_df[h2h_df['description'].isin(in_play)].copy()
+                            h2h_swings = h2h_df[h2h_df['description'].isin(swings)].copy()
+                            
+                            total_pitches = len(h2h_df)
+                            avg_ev = h2h_bbe['launch_speed'].mean() if not h2h_bbe.empty else 0
+                            hard_hits = (h2h_bbe['launch_speed'] >= 95).sum() if not h2h_bbe.empty else 0
+                            bbe_count = len(h2h_bbe)
+                            hard_hit_pct = (hard_hits / bbe_count * 100) if bbe_count > 0 else 0
+                            
+                            whiff_count = h2h_swings['description'].isin(whiffs).sum()
+                            swing_count = len(h2h_swings)
+                            whiff_pct = (whiff_count / swing_count * 100) if swing_count > 0 else 0
 
-                        st.markdown("##### 📜 Historical Box Score")
-                        at_bats = data.dropna(subset=['events']).copy()
-                        if not at_bats.empty:
-                            if player_type == "Batter":
+                            at_bats = h2h_df.dropna(subset=['events']).copy()
+                            if not at_bats.empty:
                                 hits = at_bats['events'].isin(['single', 'double', 'triple', 'home_run']).sum()
                                 hrs = (at_bats['events'] == 'home_run').sum()
                                 ks = at_bats['events'].isin(['strikeout', 'strikeout_double_play']).sum()
                                 official_abs = (~at_bats['events'].isin(['walk', 'hit_by_pitch', 'sac_fly', 'sac_bunt'])).sum()
                                 ba = (hits / official_abs) if official_abs > 0 else 0.0
                                 
+                                st.markdown("##### 📜 Historical Box Score")
                                 t1, t2, t3, t4 = st.columns(4)
                                 t1.metric("Hits / ABs", f"{hits} / {official_abs}")
                                 t2.metric("Batting Avg", f".{int(ba * 1000):03d}")
                                 t3.metric("Home Runs", f"{hrs}")
                                 t4.metric("Strikeouts", f"{ks}")
+                                st.markdown("<br>", unsafe_allow_html=True)
+                            
+                            st.markdown("##### 🔬 Underlying Physics")
+                            st.caption(f"**Sample Size:** {total_pitches} total pitches seen in this specific matchup.")
+                            
+                            h1, h2, h3 = st.columns(3)
+                            h1.metric("H2H Avg Exit Velo", f"{avg_ev:.1f} mph" if avg_ev > 0 else "N/A")
+                            h2.metric("H2H Hard Hit %", f"{hard_hit_pct:.1f}%" if bbe_count > 0 else "N/A")
+                            h3.metric("H2H Whiff %", f"{whiff_pct:.1f}%" if swing_count > 0 else "N/A")
+                            
+                            if bbe_count >= 3:
+                                if hard_hit_pct >= 50.0 and whiff_pct <= 25.0:
+                                    st.success(f"🔥 **Elite Matchup:** The batter sees the ball incredibly well in this matchup, making frequent, high-quality contact.")
+                                elif hard_hit_pct < 30.0 and whiff_pct >= 35.0:
+                                    st.error(f"⚠️ **Bad Matchup:** The batter struggles heavily in this matchup (high swing & miss, weak contact).")
                             else:
-                                batters_faced = len(at_bats)
-                                ks = at_bats['events'].isin(['strikeout', 'strikeout_double_play']).sum()
-                                hits_allowed = at_bats['events'].isin(['single', 'double', 'triple', 'home_run']).sum()
-                                walks = (at_bats['events'] == 'walk').sum()
-                                
-                                t1, t2, t3, t4 = st.columns(4)
-                                t1.metric("Batters Faced", batters_faced)
-                                t2.metric("Strikeouts", ks)
-                                t3.metric("Hits Allowed", hits_allowed)
-                                t4.metric("Walks Allowed", walks)
-                        
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        
-                        st.markdown("##### 🔬 Underlying Physics")
-                        st.caption(f"**Sample Size:** {total_pitches} total pitches seen in this specific matchup.")
-                        
-                        h1, h2, h3 = st.columns(3)
-                        h1.metric("H2H Avg Exit Velo", f"{avg_ev:.1f} mph" if avg_ev > 0 else "N/A")
-                        h2.metric("H2H Hard Hit %", f"{hard_hit_pct:.1f}%" if bbe_count > 0 else "N/A")
-                        h3.metric("H2H Whiff %", f"{whiff_pct:.1f}%" if swing_count > 0 else "N/A")
-                        
-                        st.markdown("---")
-                        st.markdown("##### 📅 Recent Game Logs (H2H)")
-                        if player_type == "Batter":
-                            events_df = data.dropna(subset=['events']).copy()
-                            if not events_df.empty:
-                                events_df['TB'] = events_df['events'].map({'single': 1, 'double': 2, 'triple': 3, 'home_run': 4}).fillna(0)
-                                events_df['Hit'] = events_df['events'].isin(['single', 'double', 'triple', 'home_run']).astype(int)
-                                events_df['HR'] = (events_df['events'] == 'home_run').astype(int)
-                                game_logs = events_df.groupby('game_date').agg(TB=('TB', 'sum'), Hits=('Hit', 'sum'), HRs=('HR', 'sum')).reset_index().sort_values('game_date', ascending=False)
-                                st.dataframe(game_logs, hide_index=True)
-                        else:
-                            events_df = data.dropna(subset=['events']).copy()
-                            if not events_df.empty:
-                                events_df['K'] = (events_df['events'] == 'strikeout').astype(int)
-                                game_logs = events_df.groupby('game_date').agg(Strikeouts=('K', 'sum')).reset_index().sort_values('game_date', ascending=False)
-                                st.dataframe(game_logs, hide_index=True)
-
-                        st.markdown("---")
-                        if player_type == "Batter":
-                            st.markdown("##### 💥 Quality of Contact")
-                            bbe_df = data[data['description'].isin(in_play)].dropna(subset=['launch_speed', 'launch_angle']).copy()
-                            if not bbe_df.empty:
-                                total_bbe = len(bbe_df)
-                                bbe_df['Hard_Hit'] = (bbe_df['launch_speed'] >= 95).astype(int)
-                                bbe_df['Barrel'] = ((bbe_df['launch_speed'] >= 98) & (bbe_df['launch_angle'] >= 26) & (bbe_df['launch_angle'] <= 30)).astype(int)
-                                
-                                c1, c2, c3, c4 = st.columns(4)
-                                c1.metric("Avg Exit Velo", f"{bbe_df['launch_speed'].mean():.1f} mph")
-                                c2.metric("Max Exit Velo", f"{bbe_df['launch_speed'].max():.1f} mph")
-                                c3.metric("Hard Hit %", f"{(bbe_df['Hard_Hit'].sum() / total_bbe) * 100:.1f}%")
-                                c4.metric("Barrel %", f"{(bbe_df['Barrel'].sum() / total_bbe) * 100:.1f}%")
-                            else:
-                                st.info("Not enough batted ball data in this matchup.")
-                        else:
-                            st.markdown("##### 📈 Advanced Pitcher Diagnostics")
-                            pitch_df = data.dropna(subset=['pitch_name', 'description']).copy()
-                            if not pitch_df.empty:
-                                called_strikes = ['called_strike']
-                                pitch_df['is_swing'] = pitch_df['description'].isin(swings).astype(int)
-                                pitch_df['is_whiff'] = pitch_df['description'].isin(whiffs).astype(int)
-                                pitch_df['is_csw'] = pitch_df['description'].isin(whiffs + called_strikes).astype(int)
-                                
-                                diag_table = pitch_df.groupby('pitch_name').agg(
-                                    Total_Pitches=('pitch_name', 'count'),
-                                    Swings=('is_swing', 'sum'),
-                                    Whiffs=('is_whiff', 'sum'),
-                                    CSW=('is_csw', 'sum')
-                                ).reset_index()
-                                
-                                diag_table['Whiff%'] = (diag_table['Whiffs'] / diag_table['Swings'].replace(0, np.nan)).fillna(0) * 100
-                                diag_table['CSW%'] = (diag_table['CSW'] / diag_table['Total_Pitches']).fillna(0) * 100
-                                diag_table = diag_table.sort_values(by='Total_Pitches', ascending=False)
-                                
-                                diag_table['Whiff%'] = diag_table['Whiff%'].map("{:.1f}%".format)
-                                diag_table['CSW%'] = diag_table['CSW%'].map("{:.1f}%".format)
-                                
-                                st.dataframe(diag_table[['pitch_name', 'Total_Pitches', 'Whiff%', 'CSW%']].rename(columns={'pitch_name': 'Pitch Type'}), hide_index=True)
-
-                        if player_type == "Batter":
-                            st.markdown("---")
-                            st.markdown("##### ⚾ Performance by Pitch Type (Seen)")
-                            at_bats_p = data.dropna(subset=['events']).copy()
-                            if not at_bats_p.empty:
-                                at_bats_p['Hit'] = at_bats_p['events'].isin(['single', 'double', 'triple', 'home_run'])
-                                at_bats_p['Home_Run'] = at_bats_p['events'] == 'home_run'
-                                match_table = at_bats_p.groupby('pitch_name').agg(
-                                    Total_Seen=('events', 'count'),
-                                    Hits=('Hit', 'sum'),
-                                    Home_Runs=('Home_Run', 'sum')
-                                ).reset_index().rename(columns={'pitch_name': 'Pitch Type', 'Total_Seen': 'Plate Appearances'}).sort_values(by='Plate Appearances', ascending=False)
-                                st.dataframe(match_table, hide_index=True)
+                                st.info("No matchup data found in this timeframe.")
 
                     # ==========================================================
                     # MODE B: MACRO PLAYER PROFILE (No Opponent Specified)
                     # ==========================================================
                     else:
+                        # --- ROLLING PROP HIT RATES ---
                         st.markdown("---")
                         st.subheader("Rolling Prop Hit Rates (L5 / L10 / L20)")
                         
@@ -365,6 +291,7 @@ with tab1:
                                 rates_df = pd.DataFrame(rates_data)
                                 st.dataframe(rates_df[["Prop", "L5 (Fair Odds)", "L10 (Fair Odds)", "L20 (Fair Odds)"]], hide_index=True)
 
+                        # --- +EV EDGE CALCULATOR ---
                         if 'game_logs' in locals() and not game_logs.empty and 'props' in locals():
                             st.markdown("---")
                             st.markdown("##### 💰 Bookmaker Edge & +EV Calculator")
@@ -416,6 +343,7 @@ with tab1:
                                         })
                                         st.rerun()
 
+                        # --- QUALITY OF CONTACT ---
                         if player_type == "Batter":
                             st.markdown("---")
                             st.subheader("Quality of Contact (Batted Balls)")
@@ -438,6 +366,7 @@ with tab1:
                             else:
                                 st.info("Not enough batted ball data to calculate Quality of Contact.")
 
+                        # --- LUCK REGRESSION ---
                         if player_type == "Batter":
                             st.markdown("---")
                             st.subheader("Luck Regression (Expected vs Actual)")
@@ -476,6 +405,7 @@ with tab1:
                                 else:
                                     st.info("⚖️ **Balanced Profile:** The hitter's actual outcomes closely match their contact quality.")
 
+                        # --- PARK FACTORS ---
                         if player_type == "Batter":
                             st.markdown("---")
                             st.subheader("🏟️ Enterprise Park Factors (Handedness Splits)")
@@ -513,6 +443,7 @@ with tab1:
                                 pk1.metric(f"Park-Adjusted xBA", f".{str(adj_xba).split('.')[1][:3].ljust(3, '0')}" if adj_xba > 0 else ".000", delta=f"{adj_xba - base_xba:+.3f}")
                                 pk2.metric(f"Park-Adjusted xSLG", f".{str(adj_xslg).split('.')[1][:3].ljust(3, '0')}" if adj_xslg > 0 else ".000", delta=f"{adj_xslg - base_xslg:+.3f}")
 
+                        # --- PITCH TYPE TABLES ---
                         st.markdown("---")
                         if player_type == "Batter":
                             st.subheader("Performance by Pitch Type (Seen)")
@@ -554,104 +485,98 @@ with tab1:
                                 
                                 st.dataframe(diag_table[['pitch_name', 'Total_Pitches', 'Whiff%', 'CSW%']].rename(columns={'pitch_name': 'Pitch Type'}), hide_index=True)
 
-                        # ==========================================================
-                        # DEDICATED FULL-WIDTH BOTTOM VISUAL SECTIONS
-                        # ==========================================================
-                        if player_type == "Batter":
-                            st.markdown("---")
-                            st.subheader("🔥 Batter Heat Zones & Batted Ball Spray Chart")
-                            col_hz, col_sc = st.columns(2)
+                        # --- ORIGINAL RESTORED ADVANCED VISUALS ---
+                        st.markdown("---")
+                        st.subheader("Advanced Visuals")
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            fig, ax = plt.subplots(figsize=(6, 6))
                             
-                            with col_hz:
+                            # Draw Strike Zone
+                            sz_top = data['sz_top'].mean() if not data['sz_top'].isna().all() else 3.5
+                            sz_bot = data['sz_bot'].mean() if not data['sz_bot'].isna().all() else 1.5
+                            rect = plt.Rectangle((-0.71, sz_bot), 1.42, sz_top - sz_bot, fill=False, color='black', linewidth=2, zorder=10)
+                            ax.add_patch(rect)
+                            
+                            if player_type == "Batter":
                                 st.markdown("**Hot Zones (Exit Velo > 90mph)**")
-                                hot_data = data[(data['launch_speed'] >= 90) & (data['plate_x'].notnull()) & (data['plate_z'].notnull())]
-                                if not hot_data.empty:
-                                    fig, ax = plt.subplots(figsize=(5, 4))
-                                    sns.scatterplot(data=hot_data, x='plate_x', y='plate_z', hue='launch_speed', palette='Reds', ax=ax, alpha=0.8, legend=False)
-                                    ax.set_xlim(-1.5, 1.5)
-                                    ax.set_ylim(0.5, 4.5)
-                                    ax.axvline(0.83, color='grey', ls='--')
-                                    ax.axvline(-0.83, color='grey', ls='--')
-                                    ax.axhline(1.5, color='grey', ls='--')
-                                    ax.axhline(3.5, color='grey', ls='--')
-                                    ax.set_title("Hard-Hit Locations (EV >= 90)")
-                                    st.pyplot(fig)
-                                    plt.close(fig)
-                                else:
-                                    st.info("Not enough hard-hit tracking data available.")
-                                    
-                            with col_sc:
-                                st.markdown("**Batted Ball Spray Chart**")
-                                spray_data = data[data['hc_x'].notnull() & data['hc_y'].notnull()].copy()
-                                if not spray_data.empty:
-                                    fig, ax = plt.subplots(figsize=(5, 4))
-                                    spray_data['spray_x'] = spray_data['hc_x'] - 125.42
-                                    spray_data['spray_y'] = 200 - (spray_data['hc_y'] - 125.42)
-                                    sns.scatterplot(data=spray_data, x='spray_x', y='spray_y', hue='events', ax=ax, palette='Set1', s=30, alpha=0.8)
-                                    ax.set_xlim(-150, 150)
-                                    ax.set_ylim(-50, 250)
-                                    ax.axis('off')
-                                    ax.set_title("Estimated Spray Distribution")
-                                    ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', fontsize='x-small', frameon=False)
-                                    plt.tight_layout()
-                                    st.pyplot(fig)
-                                    plt.close(fig)
-                                else:
-                                    st.info("Not enough coordinate data for spray chart.")
+                                heat_data = data[(data['launch_speed'] >= 90)].dropna(subset=['plate_x', 'plate_z'])
+                                cmap_color = "Reds"
+                            else:
+                                st.markdown("**Cold Zones (Whiffs)**")
+                                whiffs = ['swinging_strike', 'swinging_strike_blocked', 'missed_bunt']
+                                heat_data = data[data['description'].isin(whiffs)].dropna(subset=['plate_x', 'plate_z'])
+                                cmap_color = "Blues"
 
-                        else:
-                            st.markdown("---")
-                            st.subheader("❄️ Pitcher Cold Zones & Velocity Trends")
-                            col_cz, col_vt = st.columns(2)
+                            if not heat_data.empty:
+                                sns.kdeplot(
+                                    data=heat_data, x='plate_x', y='plate_z', 
+                                    fill=True, cmap=cmap_color, alpha=0.8, 
+                                    levels=15, thresh=0.05, ax=ax
+                                )
+                            else:
+                                st.info("Not enough data to generate a heatmap.")
                             
-                            with col_cz:
-                                st.markdown("**Cold Zones (Whiff Locations)**")
-                                whiff_des = ['swinging_strike', 'swinging_strike_blocked', 'missed_bunt']
-                                whiff_data = data[data['description'].isin(whiff_des) & data['plate_x'].notnull() & data['plate_z'].notnull()]
-                                if not whiff_data.empty:
-                                    fig, ax = plt.subplots(figsize=(5, 4))
-                                    sns.scatterplot(data=whiff_data, x='plate_x', y='plate_z', hue='pitch_name', ax=ax, palette='tab10', alpha=0.8)
-                                    ax.set_xlim(-1.5, 1.5)
-                                    ax.set_ylim(0.5, 4.5)
-                                    ax.axvline(0.83, color='grey', ls='--')
-                                    ax.axvline(-0.83, color='grey', ls='--')
-                                    ax.axhline(1.5, color='grey', ls='--')
-                                    ax.axhline(3.5, color='grey', ls='--')
-                                    ax.set_title("Whiff Locations")
-                                    ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', fontsize='x-small', frameon=False)
-                                    plt.tight_layout()
-                                    st.pyplot(fig)
-                                    plt.close(fig)
-                                else:
-                                    st.info("Not enough whiff location data available.")
+                            ax.set_xlim(-3, 3)
+                            ax.set_ylim(0, 5)
+                            ax.set_xlabel("Horizontal Location (ft)")
+                            ax.set_ylabel("Vertical Location (ft)")
+                            st.pyplot(fig)
+                            plt.close(fig)
+                            
+                        with col2:
+                            if player_type == "Batter":
+                                st.markdown("**Batted Ball Spray Chart**")
+                                hits_df = data.dropna(subset=['hc_x', 'hc_y', 'events']).copy()
+                                
+                                if not hits_df.empty:
+                                    hits_df['x_feet'] = 2.5 * (hits_df['hc_x'] - 125.42)
+                                    hits_df['y_feet'] = 2.5 * (198.27 - hits_df['hc_y'])
                                     
-                            with col_vt:
+                                    fig2, ax2 = plt.subplots(figsize=(6, 6))
+                                    
+                                    bases_x = [0, 63.6, 0, -63.6, 0]
+                                    bases_y = [0, 63.6, 127.3, 63.6, 0]
+                                    ax2.plot(bases_x, bases_y, color='gray', linestyle='--')
+                                    
+                                    theta = np.linspace(-np.pi/4, np.pi/4, 100)
+                                    r = 350 
+                                    ax2.plot(r*np.sin(theta), r*np.cos(theta), color='gray')
+                                    
+                                    sns.scatterplot(data=hits_df, x='x_feet', y='y_feet', hue='events', ax=ax2, alpha=0.8, palette="Set1")
+                                    
+                                    ax2.set_xlim(-250, 250)
+                                    ax2.set_ylim(-50, 450)
+                                    ax2.set_xlabel("Feet (L/R)")
+                                    ax2.set_ylabel("Feet (Distance)")
+                                    ax2.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=2, fontsize='small')
+                                    st.pyplot(fig2)
+                                    plt.close(fig2)
+                                else:
+                                    st.info("No batted ball data found for this timeframe.")
+                            else:
                                 st.markdown("**Pitch Velocity Over Time**")
-                                velo_data = data.dropna(subset=['game_date', 'release_speed', 'pitch_name']).copy()
-                                if not velo_data.empty:
-                                    velo_data['game_date'] = pd.to_datetime(velo_data['game_date'])
-                                    velo_data = velo_data.sort_values('game_date')
-                                    
-                                    fig, ax = plt.subplots(figsize=(5, 4))
-                                    sns.lineplot(data=velo_data, x='game_date', y='release_speed', hue='pitch_name', ax=ax, marker='o', errorbar=None)
-                                    ax.set_title("Velocity Trend by Pitch Type")
-                                    ax.set_xlabel("Date")
-                                    ax.set_ylabel("Velo (mph)")
-                                    
-                                    ax.xaxis.set_major_locator(plt.MaxNLocator(4))
-                                    fig.autofmt_xdate()
-                                    
-                                    ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', fontsize='x-small', frameon=False)
-                                    plt.tight_layout()
-                                    st.pyplot(fig)
-                                    plt.close(fig)
+                                fig2, ax2 = plt.subplots(figsize=(6, 6))
+                                
+                                vel_df = data.dropna(subset=['release_speed', 'pitch_name'])
+                                if not vel_df.empty:
+                                    sns.lineplot(data=vel_df, x='game_date', y='release_speed', hue='pitch_name', ax=ax2, marker='o')
+                                    ax2.set_xlabel("Game Date")
+                                    ax2.set_ylabel("Velocity (mph)")
+                                    plt.xticks(rotation=45)
+                                    ax2.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=2, fontsize='small')
+                                    st.pyplot(fig2)
+                                    plt.close(fig2)
                                 else:
-                                    st.info("Not enough velocity tracking data available.")
+                                    st.info("No velocity data available.")
 
                         # --- INNING SPLITS (PITCHER ONLY) ---
                         if player_type == "Pitcher":
                             st.markdown("---")
                             st.subheader("Fatigue & Inning Splits (NRFI / Pitch Outs)")
+                            
                             pitch_data = data.copy()
                             pitch_data['pa_idx'] = pitch_data.groupby('game_date')['at_bat_number'].transform(lambda x: x.rank(method='dense'))
                             pitch_data['tto_raw'] = np.ceil(pitch_data['pa_idx'] / 9.0)
@@ -682,6 +607,8 @@ with tab1:
                                     ).reset_index()
                                     tto_stats['K_Rate'] = (tto_stats['K_Rate'] * 100).map("{:.1f}%".format)
                                     tto_stats['OBP'] = tto_stats['OBP'].apply(lambda x: f".{str(x).split('.')[1][:3].ljust(3, '0')}" if pd.notnull(x) and '.' in str(x) else ".000")
+                                    tto_stats['sort_col'] = tto_stats['TTO'].map({"1st Time": 1, "2nd Time": 2, "3rd+ Time": 3})
+                                    tto_stats = tto_stats.sort_values('sort_col').drop(columns=['sort_col'])
                                     st.dataframe(tto_stats, hide_index=True, use_container_width=True)
 
 # ==========================================
