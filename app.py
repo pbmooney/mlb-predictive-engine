@@ -513,44 +513,6 @@ with tab1:
                                 pk1.metric(f"Park-Adjusted xBA", f".{str(adj_xba).split('.')[1][:3].ljust(3, '0')}" if adj_xba > 0 else ".000", delta=f"{adj_xba - base_xba:+.3f}")
                                 pk2.metric(f"Park-Adjusted xSLG", f".{str(adj_xslg).split('.')[1][:3].ljust(3, '0')}" if adj_xslg > 0 else ".000", delta=f"{adj_xslg - base_xslg:+.3f}")
 
-                        if player_type == "Batter":
-                            st.markdown("---")
-                            st.subheader("🔥 Batter Heat Zones & Spray Chart")
-                            col_hz, col_sc = st.columns(2)
-                            with col_hz:
-                                st.markdown("**Hot Zones (Exit Velo > 90mph)**")
-                                hot_data = data[(data['launch_speed'] >= 90) & (data['plate_x'].notnull()) & (data['plate_z'].notnull())]
-                                if not hot_data.empty:
-                                    fig, ax = plt.subplots(figsize=(4, 4))
-                                    sns.scatterplot(data=hot_data, x='plate_x', y='plate_z', hue='launch_speed', palette='Reds', ax=ax, alpha=0.8, legend=False)
-                                    ax.set_xlim(-1.5, 1.5)
-                                    ax.set_ylim(0.5, 4.5)
-                                    ax.axvline(0.83, color='grey', ls='--')
-                                    ax.axvline(-0.83, color='grey', ls='--')
-                                    ax.axhline(1.5, color='grey', ls='--')
-                                    ax.axhline(3.5, color='grey', ls='--')
-                                    ax.set_title("Hard-Hit Locations (EV >= 90)")
-                                    st.pyplot(fig)
-                                    plt.close(fig)
-                                else:
-                                    st.info("Not enough hard-hit tracking data available.")
-                            with col_sc:
-                                st.markdown("**Batted Ball Spray Chart**")
-                                spray_data = data[data['hc_x'].notnull() & data['hc_y'].notnull()].copy()
-                                if not spray_data.empty:
-                                    fig, ax = plt.subplots(figsize=(4, 4))
-                                    spray_data['spray_x'] = spray_data['hc_x'] - 125.42
-                                    spray_data['spray_y'] = 200 - (spray_data['hc_y'] - 125.42)
-                                    sns.scatterplot(data=spray_data, x='spray_x', y='spray_y', hue='events', ax=ax, palette='Set1', s=20, alpha=0.8, legend=False)
-                                    ax.set_xlim(-150, 150)
-                                    ax.set_ylim(-50, 250)
-                                    ax.axis('off')
-                                    ax.set_title("Estimated Spray Distribution")
-                                    st.pyplot(fig)
-                                    plt.close(fig)
-                                else:
-                                    st.info("Not enough coordinate data for spray chart.")
-
                         st.markdown("---")
                         if player_type == "Batter":
                             st.subheader("Performance by Pitch Type (Seen)")
@@ -592,16 +554,63 @@ with tab1:
                                 
                                 st.dataframe(diag_table[['pitch_name', 'Total_Pitches', 'Whiff%', 'CSW%']].rename(columns={'pitch_name': 'Pitch Type'}), hide_index=True)
 
+                        # ==========================================================
+                        # DEDICATED FULL-WIDTH BOTTOM VISUAL SECTIONS
+                        # ==========================================================
+                        if player_type == "Batter":
+                            st.markdown("---")
+                            st.subheader("🔥 Batter Heat Zones & Batted Ball Spray Chart")
+                            col_hz, col_sc = st.columns(2)
+                            
+                            with col_hz:
+                                st.markdown("**Hot Zones (Exit Velo > 90mph)**")
+                                hot_data = data[(data['launch_speed'] >= 90) & (data['plate_x'].notnull()) & (data['plate_z'].notnull())]
+                                if not hot_data.empty:
+                                    fig, ax = plt.subplots(figsize=(5, 4))
+                                    sns.scatterplot(data=hot_data, x='plate_x', y='plate_z', hue='launch_speed', palette='Reds', ax=ax, alpha=0.8, legend=False)
+                                    ax.set_xlim(-1.5, 1.5)
+                                    ax.set_ylim(0.5, 4.5)
+                                    ax.axvline(0.83, color='grey', ls='--')
+                                    ax.axvline(-0.83, color='grey', ls='--')
+                                    ax.axhline(1.5, color='grey', ls='--')
+                                    ax.axhline(3.5, color='grey', ls='--')
+                                    ax.set_title("Hard-Hit Locations (EV >= 90)")
+                                    st.pyplot(fig)
+                                    plt.close(fig)
+                                else:
+                                    st.info("Not enough hard-hit tracking data available.")
+                                    
+                            with col_sc:
+                                st.markdown("**Batted Ball Spray Chart**")
+                                spray_data = data[data['hc_x'].notnull() & data['hc_y'].notnull()].copy()
+                                if not spray_data.empty:
+                                    fig, ax = plt.subplots(figsize=(5, 4))
+                                    spray_data['spray_x'] = spray_data['hc_x'] - 125.42
+                                    spray_data['spray_y'] = 200 - (spray_data['hc_y'] - 125.42)
+                                    sns.scatterplot(data=spray_data, x='spray_x', y='spray_y', hue='events', ax=ax, palette='Set1', s=30, alpha=0.8)
+                                    ax.set_xlim(-150, 150)
+                                    ax.set_ylim(-50, 250)
+                                    ax.axis('off')
+                                    ax.set_title("Estimated Spray Distribution")
+                                    ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', fontsize='x-small', frameon=False)
+                                    plt.tight_layout()
+                                    st.pyplot(fig)
+                                    plt.close(fig)
+                                else:
+                                    st.info("Not enough coordinate data for spray chart.")
+
+                        else:
                             st.markdown("---")
                             st.subheader("❄️ Pitcher Cold Zones & Velocity Trends")
                             col_cz, col_vt = st.columns(2)
+                            
                             with col_cz:
                                 st.markdown("**Cold Zones (Whiff Locations)**")
                                 whiff_des = ['swinging_strike', 'swinging_strike_blocked', 'missed_bunt']
                                 whiff_data = data[data['description'].isin(whiff_des) & data['plate_x'].notnull() & data['plate_z'].notnull()]
                                 if not whiff_data.empty:
-                                    fig, ax = plt.subplots(figsize=(4, 4))
-                                    sns.scatterplot(data=whiff_data, x='plate_x', y='plate_z', hue='pitch_name', ax=ax, palette='tab10', alpha=0.8, legend=False)
+                                    fig, ax = plt.subplots(figsize=(5, 4))
+                                    sns.scatterplot(data=whiff_data, x='plate_x', y='plate_z', hue='pitch_name', ax=ax, palette='tab10', alpha=0.8)
                                     ax.set_xlim(-1.5, 1.5)
                                     ax.set_ylim(0.5, 4.5)
                                     ax.axvline(0.83, color='grey', ls='--')
@@ -609,10 +618,13 @@ with tab1:
                                     ax.axhline(1.5, color='grey', ls='--')
                                     ax.axhline(3.5, color='grey', ls='--')
                                     ax.set_title("Whiff Locations")
+                                    ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', fontsize='x-small', frameon=False)
+                                    plt.tight_layout()
                                     st.pyplot(fig)
                                     plt.close(fig)
                                 else:
                                     st.info("Not enough whiff location data available.")
+                                    
                             with col_vt:
                                 st.markdown("**Pitch Velocity Over Time**")
                                 velo_data = data.dropna(subset=['game_date', 'release_speed', 'pitch_name']).copy()
@@ -620,8 +632,8 @@ with tab1:
                                     velo_data['game_date'] = pd.to_datetime(velo_data['game_date'])
                                     velo_data = velo_data.sort_values('game_date')
                                     
-                                    fig, ax = plt.subplots(figsize=(4, 4))
-                                    sns.lineplot(data=velo_data, x='game_date', y='release_speed', hue='pitch_name', ax=ax, marker='o', errorbar=None, legend=False)
+                                    fig, ax = plt.subplots(figsize=(5, 4))
+                                    sns.lineplot(data=velo_data, x='game_date', y='release_speed', hue='pitch_name', ax=ax, marker='o', errorbar=None)
                                     ax.set_title("Velocity Trend by Pitch Type")
                                     ax.set_xlabel("Date")
                                     ax.set_ylabel("Velo (mph)")
@@ -629,6 +641,8 @@ with tab1:
                                     ax.xaxis.set_major_locator(plt.MaxNLocator(4))
                                     fig.autofmt_xdate()
                                     
+                                    ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', fontsize='x-small', frameon=False)
+                                    plt.tight_layout()
                                     st.pyplot(fig)
                                     plt.close(fig)
                                 else:
