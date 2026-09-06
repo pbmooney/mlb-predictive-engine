@@ -560,13 +560,21 @@ with tab1:
                                 st.markdown("**Pitch Velocity Over Time**")
                                 fig2, ax2 = plt.subplots(figsize=(6, 6))
                                 
-                                vel_df = data.dropna(subset=['release_speed', 'pitch_name'])
+                                vel_df = data.dropna(subset=['release_speed', 'pitch_name', 'game_date']).copy()
                                 if not vel_df.empty:
+                                    vel_df['game_date'] = pd.to_datetime(vel_df['game_date'])
+                                    vel_df = vel_df.sort_values('game_date')
+                                    
                                     sns.lineplot(data=vel_df, x='game_date', y='release_speed', hue='pitch_name', ax=ax2, marker='o')
                                     ax2.set_xlabel("Game Date")
                                     ax2.set_ylabel("Velocity (mph)")
-                                    plt.xticks(rotation=45)
-                                    ax2.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=2, fontsize='small')
+                                    
+                                    # Clean date formatting to prevent overlap
+                                    ax2.xaxis.set_major_locator(plt.MaxNLocator(5))
+                                    fig2.autofmt_xdate()
+                                    
+                                    ax2.legend(bbox_to_anchor=(0.5, -0.18), loc='upper center', ncol=2, fontsize='small')
+                                    plt.tight_layout()
                                     st.pyplot(fig2)
                                     plt.close(fig2)
                                 else:
