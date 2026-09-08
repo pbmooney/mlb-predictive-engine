@@ -894,7 +894,7 @@ with tab4:
     st.header("📖 The Quantitative Bettor's Playbook")
     st.write("A complete guide to finding predictive edges across the platform.")
 
-st.markdown("""
+    st.markdown("""
     ### 1. The Player Dashboard (Tab 1: Identifying Individual Form)
     The Player Dashboard isolates an individual's current physical form from their stale, full-season statistics. The market prices props based on 162-game averages; you use this tab to exploit 14-to-30-day mechanical changes.
     
