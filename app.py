@@ -954,8 +954,8 @@ with tab4:
     
     ### 4. The Automated Slate Edge Scanner (Execution Methodology)
     The Edge Scanner in Tab 3 operationalizes all the underlying principles of this playbook into a single, automated screening engine. Instead of manually cross-referencing pitch usage against opponent vulnerabilities game by game, the scanner applies hard quantitative filters across a slate:
-    
-    * **The 30/30 Strikeout Rule:** The scanner flags a high-confidence **Pitcher Over Ks** prop only when a pitcher's primary weapon exceeds a **30% usage rate** and matches against a lineup carrying a **30%+ Whiff Rate** against that specific pitch type over the rolling window. This filters out noise and isolates true high-leverage strikeout environments.
-    * **The Hard-Hit Mismatch Rule:** Conversely, it flags a **Team Total Over** (fade the pitcher) when a high-usage primary pitch (>30%) intersects with a lineup posting a **40%+ Hard Hit rate** against it. This identifies when a starting pitcher's go-to weapon is a mechanical liability.
-    * **Dynamic Threshold Tuning:** Because baseball sample sizes fluctuate, understanding *why* an edge triggers allows you to interpret the scanner's output with appropriate bankroll sizing—treating high-confidence 30/30 convergence signals as primary targets while treating neutral outputs as pass-spots.
-    """)
+
+    * **The 15/18 Strikeout Rule:** The scanner flags a high-confidence Pitcher Over Ks prop when a pitcher's primary weapon exceeds a 15% usage rate and generates an 18%+ Whiff Rate against that specific pitch type over the rolling window. This filters out noise and isolates true high-leverage strikeout environments.
+    * **The Hard-Hit Mismatch Rule:** Conversely, it flags a Team Total Over or fade opportunity when a high-usage primary pitch (>15%) intersects with a 36%+ Hard Hit rate against it. This identifies when a starting pitcher's go-to weapon is a mechanical liability.
+    * **Dynamic Threshold Tuning:** Because baseball sample sizes fluctuate, understanding why an edge triggers allows you to interpret the scanner's output with appropriate bankroll sizing—treating high-confidence convergence signals as primary targets while treating neutral outputs as pass-spots.
+""")
