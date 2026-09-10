@@ -878,12 +878,17 @@ with tab3:
                                 matrix = p_usage.merge(t_perf, on='pitch_name', how='inner')
                                 if not matrix.empty:
                                     primary = matrix.sort_values(by='Usage %', ascending=False).iloc[0]
-                                    if primary['Usage %'] > 20 and primary['Team Whiff %'] > 22:
-                                        st.success(f"🚨 **STRIKEOUT EDGE DETECTED: OVER Ks** ({primary['pitch_name']} Usage: {primary['Usage %']:.1f}%, Team Whiff: {primary['Team Whiff %']:.1f}%)")
-                                    elif primary['Usage %'] > 20 and primary['Team Hard Hit %'] > 32:
-                                        st.error(f"🚨 **FADE PITCHER DETECTED: TEAM TOTAL OVER** ({primary['pitch_name']} Hard Hit: {primary['Team Hard Hit %']:.1f}%)")
-                                    else:
-                                        st.info("⚖️ No structural edge found.")
+                                    
+                                    whiff_threshold = 18.0
+                                    hard_hit_threshold = 36.0
+                                    
+                                    if primary['Usage %'] > 15:
+                                        if primary['Team Whiff %'] >= whiff_threshold:
+                                            st.success(f"🚨 **STRIKEOUT EDGE DETECTED: OVER Ks** ({primary['pitch_name']} Usage: {primary['Usage %']:.1f}%, Team Whiff vs Pitch: {primary['Team Whiff %']:.1f}%)")
+                                        elif primary['Team Hard Hit %'] >= hard_hit_threshold:
+                                            st.error(f"🚨 **FADE PITCHER / OPPONENT OVER:** ({primary['pitch_name']} Hard Hit vs Pitch: {primary['Team Hard Hit %']:.1f}%)")
+                                        else:
+                                            st.info(f"⚖️ Moderate Edge / Neutral Spot ({primary['pitch_name']} Usage: {primary['Usage %']:.1f}%)")
                     except Exception as e:
                         st.error(f"Error: {e}")
 
@@ -893,7 +898,7 @@ with tab3:
 with tab4:
     st.header("📖 The Quantitative Bettor's Playbook")
     st.write("A complete guide to finding predictive edges across the platform.")
-
+    
     st.markdown("""
     ### 1. The Player Dashboard (Tab 1: Identifying Individual Form)
     The Player Dashboard isolates an individual's current physical form from their stale, full-season statistics. The market prices props based on 162-game averages; you use this tab to exploit 14-to-30-day mechanical changes.
