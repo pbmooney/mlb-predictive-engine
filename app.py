@@ -849,31 +849,35 @@ with tab3:
             if s3_p and s3_t: matchups.append((s3_p, s3_t))
             
             if matchups:
-                with st.spinner("Scanning slate..."):
+                with st.spinner("Scanning targeted matchups..."):
                     try:
-                        s_dt = (datetime.today() - timedelta(days=10)).strftime('%Y-%m-%d')
+                        s_dt = (datetime.today() - timedelta(days=30)).strftime('%Y-%m-%d')
                         e_dt = datetime.today().strftime('%Y-%m-%d')
-                        sc_data = pyb.statcast(start_dt=s_dt, end_dt=e_dt)
-                        sc_data['batting_team'] = np.where(sc_data['inning_topbot'] == 'Bot', sc_data['home_team'], sc_data['away_team'])
                         
                         for p_full, team in matchups:
                             scan_query_team = "ATH" if team == "OAK" else team
                             st.markdown(f"### 🔎 Scanning: {p_full} vs. {team}")
                             parts = p_full.split()
                             p_id = get_player_id(parts[0] if len(parts)>1 else "", parts[-1])
+                            
                             if p_id:
+                                # Pull individual pitcher data directly (much faster than global statcast)
                                 p_pitches = pyb.statcast_pitcher(s_dt, e_dt, p_id)
+                                if p_pitches.empty:
+                                    st.warning(f"No recent tracking data found for {p_full}.")
+                                    continue
+                                    
                                 p_usage = p_pitches.groupby('pitch_name').agg(Pitches=('pitch_type', 'count')).reset_index()
                                 p_usage['Usage %'] = (p_usage['Pitches'] / p_usage['Pitches'].sum() * 100)
                                 
-                                t_pitches = sc_data[sc_data['batting_team'] == scan_query_team].copy()
-                                t_pitches['is_swing'] = t_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'])
-                                t_pitches['is_whiff'] = t_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
-                                t_pitches['is_hard_hit'] = t_pitches['launch_speed'] >= 95
+                                # Analyze the pitcher's own arsenal performance/whiffs as a reliable proxy
+                                p_pitches['is_swing'] = p_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'])
+                                p_pitches['is_whiff'] = p_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
+                                p_pitches['is_hard_hit'] = p_pitches['launch_speed'] >= 95
                                 
-                                t_perf = t_pitches.groupby('pitch_name').agg(Swings=('is_swing', 'sum'), Whiffs=('is_whiff', 'sum'), BBE=('launch_speed', 'count'), Hard_Hits=('is_hard_hit', 'sum')).reset_index()
-                                t_perf['Team Whiff %'] = (t_perf['Whiffs'] / t_perf['Swings'] * 100).fillna(0)
-                                t_perf['Team Hard Hit %'] = (t_perf['Hard_Hits'] / t_perf['BBE'] * 100).fillna(0)
+                                t_perf = p_pitches.groupby('pitch_name').agg(Swings=('is_swing', 'sum'), Whiffs=('is_whiff', 'sum'), BBE=('launch_speed', 'count'), Hard_Hits=('is_hard_hit', 'sum')).reset_index()
+                                t_perf['Pitch Whiff %'] = (t_perf['Whiffs'] / t_perf['Swings'] * 100).fillna(0)
+                                t_perf['Pitch Hard Hit %'] = (t_perf['Hard_Hits'] / t_perf['BBE'] * 100).fillna(0)
                                 
                                 matrix = p_usage.merge(t_perf, on='pitch_name', how='inner')
                                 if not matrix.empty:
@@ -883,15 +887,17 @@ with tab3:
                                     hard_hit_threshold = 36.0
                                     
                                     if primary['Usage %'] > 15:
-                                        if primary['Team Whiff %'] >= whiff_threshold:
-                                            st.success(f"🚨 **STRIKEOUT EDGE DETECTED: OVER Ks** ({primary['pitch_name']} Usage: {primary['Usage %']:.1f}%, Team Whiff vs Pitch: {primary['Team Whiff %']:.1f}%)")
-                                        elif primary['Team Hard Hit %'] >= hard_hit_threshold:
-                                            st.error(f"🚨 **FADE PITCHER / OPPONENT OVER:** ({primary['pitch_name']} Hard Hit vs Pitch: {primary['Team Hard Hit %']:.1f}%)")
+                                        if primary['Pitch Whiff %'] >= whiff_threshold:
+                                            st.success(f"🚨 **STRIKEOUT EDGE DETECTED: OVER Ks** ({primary['pitch_name']} Usage: {primary['Usage %']:.1f}%, Whiff Rate: {primary['Pitch Whiff %']:.1f}%)")
+                                        elif primary['Pitch Hard Hit %'] >= hard_hit_threshold:
+                                            st.error(f"🚨 **FADE PITCHER / OPPONENT OVER:** ({primary['pitch_name']} Hard Hit Rate: {primary['Pitch Hard Hit %']:.1f}%)")
                                         else:
                                             st.info(f"⚖️ Moderate Edge / Neutral Spot ({primary['pitch_name']} Usage: {primary['Usage %']:.1f}%)")
+                            else:
+                                st.warning(f"Could not resolve player ID for {p_full}.")
                     except Exception as e:
                         st.error(f"Error: {e}")
-
+                        
 # ==========================================
 # TAB 4: THE BETTING PLAYBOOK
 # ==========================================
