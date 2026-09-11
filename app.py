@@ -827,11 +827,21 @@ with tab3:
                             t_perf['Team Whiff %'] = (t_perf['Whiffs'] / t_perf['Swings'] * 100).fillna(0)
                             t_perf['Team Hard Hit %'] = (t_perf['Hard_Hits'] / t_perf['BBE'] * 100).fillna(0)
                             
-                            matrix = p_usage.merge(t_perf, on='pitch_name', how='inner').sort_values(by='Usage %', ascending=False)
-                            st.dataframe(matrix[['pitch_name', 'Usage %', 'Team Whiff %', 'Team Hard Hit %']], hide_index=True)
+                            matrix = p_usage.merge(t_perf, on='pitch_name', how='left').fillna(0).sort_values(by='Usage %', ascending=False)
+                            st.dataframe(
+                                matrix[['pitch_name', 'Usage %', 'Team Whiff %', 'Team Hard Hit %']], 
+                                use_container_width=True,
+                                hide_index=True,
+                                column_config={
+                                    "pitch_name": st.column_config.TextColumn("Pitch Type"),
+                                    "Usage %": st.column_config.NumberColumn("Pitcher Usage %", format="%.1f%%"),
+                                    "Team Whiff %": st.column_config.NumberColumn("Opponent Whiff %", format="%.1f%%"),
+                                    "Team Hard Hit %": st.column_config.NumberColumn("Opponent Hard-Hit %", format="%.1f%%"),
+                                }
+                            )
                     except Exception as e:
                         st.error(f"Error: {e}")
-
+                        
     with edge_scanner_tab:
         st.markdown("#### 🚨 Targeted Slate Edge Scanner")
         col1, col2, col3 = st.columns(3)
