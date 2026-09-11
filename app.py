@@ -820,19 +820,20 @@ with tab3:
                             if p_pitches is None or p_pitches.empty:
                                 st.warning(f"No recent pitching data found for {matrix_pitcher_full}.")
                             else:
+                                p_pitches['pitch_name'] = p_pitches['pitch_name'].str.strip()
                                 p_usage = p_pitches.groupby('pitch_name').agg(
                                     Pitches=('pitch_type', 'count'),
                                     avg_velo=('release_speed', 'mean')
                                 ).reset_index()
                                 p_usage['Usage %'] = (p_usage['Pitches'] / p_usage['Pitches'].sum() * 100)
                                 
-                                # 2. Pull ONLY the opponent team's data safely using the built-in team filter parameter
+                                # 2. Pull opponent team data using the team parameter
                                 t_pitches = pyb.statcast(start_dt=start_date, end_dt=end_date, team=matrix_query_team)
                                 
                                 if t_pitches is None or t_pitches.empty:
                                     st.warning(f"No tracking data found for team {matrix_team} in this window.")
                                 else:
-                                    # Filter specifically for when they were batting
+                                    t_pitches['pitch_name'] = t_pitches['pitch_name'].str.strip()
                                     t_pitches['batting_team'] = np.where(t_pitches['inning_topbot'] == 'Bot', t_pitches['home_team'], t_pitches['away_team'])
                                     t_batting = t_pitches[t_pitches['batting_team'] == matrix_query_team].copy()
                                     
@@ -850,7 +851,7 @@ with tab3:
                                     t_perf['Team Whiff %'] = (t_perf['Whiffs'] / t_perf['Swings'] * 100).fillna(0)
                                     t_perf['Team Hard Hit %'] = (t_perf['Hard_Hits'] / t_perf['BBE'] * 100).fillna(0)
                                     
-                                    # 3. Merge pitcher usage with true opponent team vulnerability
+                                    # 3. Merge cleanly on the normalized pitch name strings
                                     matrix = p_usage.merge(t_perf[['pitch_name', 'Team Whiff %', 'Team Hard Hit %']], on='pitch_name', how='left').fillna(0).sort_values(by='Usage %', ascending=False)
                                     
                                     st.markdown(f"**Arsenal Matrix: {matrix_pitcher_full} vs. {matrix_team} (Trailing {lookback_days_team} Days)**")
