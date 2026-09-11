@@ -7,6 +7,40 @@ import numpy as np
 from datetime import datetime, timedelta
 import unicodedata
 
+@st.cache_data
+def get_pitcher_arsenal_stats(p_id, days):
+    start_date = (datetime.today() - timedelta(days=days)).strftime('%Y-%m-%d')
+    end_date = datetime.today().strftime('%Y-%m-%d')
+    df = pyb.statcast_pitcher(start_date, end_date, p_id)
+    if df is None or df.empty:
+        return pd.DataFrame()
+    
+    df['pitch_name'] = df['pitch_name'].str.strip()
+    usage = df.groupby('pitch_name').agg(
+        Pitches=('pitch_type', 'count'),
+        avg_velo=('release_speed', 'mean')
+    ).reset_index()
+    usage['Usage %'] = (usage['Pitches'] / usage['Pitches'].sum() * 100)
+    
+    df['is_swing'] = df['description'].isin([
+        'swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 
+        'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'
+    ])
+    df['is_whiff'] = df['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
+    df['is_hard_hit'] = df['launch_speed'] >= 95
+    
+    perf = df.groupby('pitch_name').agg(
+        Swings=('is_swing', 'sum'),
+        Whiffs=('is_whiff', 'sum'),
+        BBE=('launch_speed', 'count'),
+        Hard_Hits=('is_hard_hit', 'sum')
+    ).reset_index()
+    
+    perf['Whiff %'] = (perf['Whiffs'] / perf['Swings'] * 100).fillna(0)
+    perf['Hard Hit %'] = (perf['Hard_Hits'] / perf['BBE'] * 100).fillna(0)
+    
+    return usage.merge(perf[['pitch_name', 'Whiff %', 'Hard Hit %']], on='pitch_name', how='inner')
+
 # --- ORIGINAL STABLE PLAYER ID LOOKUP ---
 @st.cache_data
 def get_player_id(first, last):
