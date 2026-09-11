@@ -640,6 +640,14 @@ with tab1:
                                         obp_1 = inn1['is_on_base'].mean() * 100
                                         st.metric("1st Inning K%", f"{k_rate_1:.1f}%")
                                         st.metric("1st Inning OBP", f".{str(obp_1/100).split('.')[1][:3].ljust(3, '0')}" if obp_1 > 0 else ".000")
+                                        
+                                        # Favorable NRFI Flagging Engine
+                                        if k_rate_1 >= 28.0 and obp_1 <= 27.0:
+                                            st.success("🔥 **Favorable NRFI Spot:** Elite early-inning strikeout rate with low traffic suppression.")
+                                        elif k_rate_1 >= 24.0 and obp_1 <= 32.0:
+                                            st.info("⚖️ **Moderate NRFI Spot:** Solid baseline metrics, but monitor top-order matchup.")
+                                        else:
+                                            st.error("⚠️ **Unfavorable / Fade Spot:** Elevated early-inning traffic or contact risk.")
                                 with i2:
                                     st.markdown("**Times Through Order (Decay)**")
                                     tto_stats = pa_df.groupby('TTO').agg(
