@@ -815,13 +815,13 @@ with tab3:
                             start_date = (datetime.today() - timedelta(days=lookback_days_team)).strftime('%Y-%m-%d')
                             end_date = datetime.today().strftime('%Y-%m-%d')
                             
-                            # 1. Pull individual pitcher arsenal data
+                            # 1. Pull individual pitcher data
                             p_pitches = pyb.statcast_pitcher(start_date, end_date, p_id)
                             if p_pitches is None or p_pitches.empty:
                                 st.warning(f"No recent pitching data found for {matrix_pitcher_full}.")
                             else:
-                                p_pitches['pitch_name'] = p_pitches['pitch_name'].str.strip()
-                                p_usage = p_pitches.groupby('pitch_name').agg(
+                                # Group by short pitch_type code instead of verbose pitch_name
+                                p_usage = p_pitches.groupby('pitch_type').agg(
                                     Pitches=('pitch_type', 'count'),
                                     avg_velo=('release_speed', 'mean')
                                 ).reset_index()
@@ -836,20 +836,12 @@ with tab3:
                                     t_pitches['batting_team'] = np.where(t_pitches['inning_topbot'] == 'Bot', t_pitches['home_team'], t_pitches['away_team'])
                                     t_batting = t_pitches[t_pitches['batting_team'] == matrix_query_team].copy()
                                     
-                                    # Map short Statcast pitch codes to match pitcher long-form names
-                                    pitch_code_map = {
-                                        'FF': '4-Seam Fastball', 'SI': 'Sinker', 'FT': '2-Seam Fastball',
-                                        'SL': 'Slider', 'CU': 'Curveball', 'CH': 'Changeup',
-                                        'FC': 'Cutter', 'FS': 'Splitter', 'KC': 'Knuckle Curve',
-                                        'ST': 'Sweeper', 'SV': 'Slurve', 'EP': 'Eephus'
-                                    }
-                                    t_batting['pitch_name'] = t_batting['pitch_type'].map(pitch_code_map).fillna(t_batting['pitch_type'])
-                                    
                                     t_batting['is_swing'] = t_batting['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'])
                                     t_batting['is_whiff'] = t_batting['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
                                     t_batting['is_hard_hit'] = t_batting['launch_speed'] >= 95
                                     
-                                    t_perf = t_batting.groupby('pitch_name').agg(
+                                    # Group opponent performance by pitch_type code
+                                    t_perf = t_batting.groupby('pitch_type').agg(
                                         Swings=('is_swing', 'sum'),
                                         Whiffs=('is_whiff', 'sum'),
                                         BBE=('launch_speed', 'count'),
@@ -859,8 +851,17 @@ with tab3:
                                     t_perf['Team Whiff %'] = (t_perf['Whiffs'] / t_perf['Swings'] * 100).fillna(0)
                                     t_perf['Team Hard Hit %'] = (t_perf['Hard_Hits'] / t_perf['BBE'] * 100).fillna(0)
                                     
-                                    # 3. Merge cleanly
-                                    matrix = p_usage.merge(t_perf[['pitch_name', 'Team Whiff %', 'Team Hard Hit %']], on='pitch_name', how='left').fillna(0).sort_values(by='Usage %', ascending=False)
+                                    # 3. Map clean full names for display using the short codes
+                                    pitch_code_map = {
+                                        'FF': '4-Seam Fastball', 'SI': 'Sinker', 'FT': '2-Seam Fastball',
+                                        'SL': 'Slider', 'CU': 'Curveball', 'CH': 'Changeup',
+                                        'FC': 'Cutter', 'FS': 'Splitter', 'KC': 'Knuckle Curve',
+                                        'ST': 'Sweeper', 'SV': 'Slurve', 'EP': 'Eephus', 'FO': 'Forkball'
+                                    }
+                                    p_usage['pitch_name'] = p_usage['pitch_type'].map(pitch_code_map).fillna(p_usage['pitch_type'])
+                                    
+                                    # Merge cleanly on the shared short 'pitch_type' key
+                                    matrix = p_usage.merge(t_perf[['pitch_type', 'Team Whiff %', 'Team Hard Hit %']], on='pitch_type', how='left').fillna(0).sort_values(by='Usage %', ascending=False)
                                     
                                     st.markdown(f"**Arsenal Matrix: {matrix_pitcher_full} vs. {matrix_team} (Trailing {lookback_days_team} Days)**")
                                     st.dataframe(
