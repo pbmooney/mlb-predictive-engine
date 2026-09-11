@@ -827,15 +827,23 @@ with tab3:
                                 ).reset_index()
                                 p_usage['Usage %'] = (p_usage['Pitches'] / p_usage['Pitches'].sum() * 100)
                                 
-                                # 2. Pull opponent team data using the team parameter
+                                # 2. Pull opponent team data
                                 t_pitches = pyb.statcast(start_dt=start_date, end_dt=end_date, team=matrix_query_team)
                                 
                                 if t_pitches is None or t_pitches.empty:
                                     st.warning(f"No tracking data found for team {matrix_team} in this window.")
                                 else:
-                                    t_pitches['pitch_name'] = t_pitches['pitch_name'].str.strip()
                                     t_pitches['batting_team'] = np.where(t_pitches['inning_topbot'] == 'Bot', t_pitches['home_team'], t_pitches['away_team'])
                                     t_batting = t_pitches[t_pitches['batting_team'] == matrix_query_team].copy()
+                                    
+                                    # Map short Statcast pitch codes to match pitcher long-form names
+                                    pitch_code_map = {
+                                        'FF': '4-Seam Fastball', 'SI': 'Sinker', 'FT': '2-Seam Fastball',
+                                        'SL': 'Slider', 'CU': 'Curveball', 'CH': 'Changeup',
+                                        'FC': 'Cutter', 'FS': 'Splitter', 'KC': 'Knuckle Curve',
+                                        'ST': 'Sweeper', 'SV': 'Slurve', 'EP': 'Eephus'
+                                    }
+                                    t_batting['pitch_name'] = t_batting['pitch_type'].map(pitch_code_map).fillna(t_batting['pitch_type'])
                                     
                                     t_batting['is_swing'] = t_batting['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'])
                                     t_batting['is_whiff'] = t_batting['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
@@ -851,7 +859,7 @@ with tab3:
                                     t_perf['Team Whiff %'] = (t_perf['Whiffs'] / t_perf['Swings'] * 100).fillna(0)
                                     t_perf['Team Hard Hit %'] = (t_perf['Hard_Hits'] / t_perf['BBE'] * 100).fillna(0)
                                     
-                                    # 3. Merge cleanly on the normalized pitch name strings
+                                    # 3. Merge cleanly
                                     matrix = p_usage.merge(t_perf[['pitch_name', 'Team Whiff %', 'Team Hard Hit %']], on='pitch_name', how='left').fillna(0).sort_values(by='Usage %', ascending=False)
                                     
                                     st.markdown(f"**Arsenal Matrix: {matrix_pitcher_full} vs. {matrix_team} (Trailing {lookback_days_team} Days)**")
