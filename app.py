@@ -905,10 +905,12 @@ with tab3:
         
         # --- NEW SCANNER SETTINGS ---
         st.markdown("##### ⚙️ Scanner Settings")
-        c1, c2 = st.columns(2)
-        min_usage = c1.slider("Minimum Pitch Usage %", min_value=10, max_value=35, value=20, step=1, key="edge_usage")
-        hh_delta_target = c2.slider("Max HH Suppression Delta (%)", min_value=-15.0, max_value=5.0, value=-3.0, step=0.5, 
-                                    help="Pitcher HH% - Team HH%. A negative number means the pitcher suppresses contact better than the team's average.", key="edge_hh")
+        c1, c2, c3 = st.columns(3)
+        min_usage = c1.slider("Min Pitch Usage %", min_value=10, max_value=35, value=20, step=1, key="edge_usage")
+        hh_delta_target = c2.slider("Max HH Suppression (Edge)", min_value=-15.0, max_value=0.0, value=-3.0, step=0.5, 
+                                    help="Negative = Pitcher suppresses hard contact better than team avg.", key="edge_hh")
+        fade_delta_target = c3.slider("Min HH Vulnerability (Fade)", min_value=1.0, max_value=15.0, value=4.0, step=0.5, 
+                                    help="Positive = Pitcher allows MORE hard contact than team avg.", key="fade_hh")
         st.markdown("---")
 
         col1, col2, col3 = st.columns(3)
@@ -994,7 +996,7 @@ with tab3:
                                 # 4. SPLIT-WHIFF & DELTA EVALUATION
                                 fastball_types = ['4-Seam Fastball', 'Sinker', 'Cutter', 'FF', 'SI', 'FC']
                                 
-                                def evaluate_mismatch(row):
+                                def evaluate_edge(row):
                                     pitch = row['pitch_name']
                                     whiff = row['Pitcher Whiff %']
                                     delta = row['HH_Delta']
@@ -1006,31 +1008,38 @@ with tab3:
                                         return (whiff >= 32.0) and hh_suppression_pass
                                         
                                 if not qualified.empty:
-                                    qualified['Is_Edge'] = qualified.apply(evaluate_mismatch, axis=1)
+                                    # POSITIVE EDGE CHECK
+                                    qualified['Is_Edge'] = qualified.apply(evaluate_edge, axis=1)
                                     edges = qualified[qualified['Is_Edge'] == True]
                                     
+                                    # NEGATIVE FADE CHECK
+                                    fades = qualified[qualified['HH_Delta'] >= fade_delta_target]
+                                    
+                                    # DISPLAY POSITIVE EDGES
                                     if edges.empty:
-                                        st.info(f"No pitches met the elite criteria against {team}.")
+                                        st.info(f"⚖️ No pitches met the elite strikeout criteria against {team}.")
                                     else:
                                         st.success(f"🔥 **STRIKEOUT EDGE DETECTED:** Found {len(edges)} Elite Weapon(s) vs {team}")
                                         st.dataframe(
                                             edges[['pitch_name', 'Usage %', 'avg_velo', 'Pitcher Whiff %', 'Pitcher HH %', 'Team HH %', 'HH_Delta']],
-                                            use_container_width=True,
-                                            hide_index=True,
-                                            column_config={
-                                                "pitch_name": st.column_config.TextColumn("Pitch Type"),
-                                                "Usage %": st.column_config.NumberColumn("Usage", format="%.1f%%"),
-                                                "avg_velo": st.column_config.NumberColumn("Velo", format="%.1f"),
-                                                "Pitcher Whiff %": st.column_config.NumberColumn("Pitcher Whiff", format="%.1f%%"),
-                                                "Pitcher HH %": st.column_config.NumberColumn("Pitcher HH", format="%.1f%%"),
-                                                "Team HH %": st.column_config.NumberColumn("Opp Team HH", format="%.1f%%"),
-                                                "HH_Delta": st.column_config.NumberColumn("Suppression Delta", format="%+.1f%%"),
-                                            }
+                                            use_container_width=True, hide_index=True,
+                                            column_config={"Usage %": st.column_config.NumberColumn(format="%.1f%%"), "Pitcher Whiff %": st.column_config.NumberColumn(format="%.1f%%"), "Pitcher HH %": st.column_config.NumberColumn(format="%.1f%%"), "Team HH %": st.column_config.NumberColumn(format="%.1f%%"), "HH_Delta": st.column_config.NumberColumn(format="%+.1f%%")}
+                                        )
+
+                                    # DISPLAY NEGATIVE FADES
+                                    if fades.empty:
+                                        st.info(f"🛡️ No severe vulnerabilities detected against {team}.")
+                                    else:
+                                        st.error(f"🚨 **FADE PITCHER / OPPONENT OVER DETECTED:** {len(fades)} Liability Pitch(es) vs {team}")
+                                        st.dataframe(
+                                            fades[['pitch_name', 'Usage %', 'avg_velo', 'Pitcher Whiff %', 'Pitcher HH %', 'Team HH %', 'HH_Delta']],
+                                            use_container_width=True, hide_index=True,
+                                            column_config={"Usage %": st.column_config.NumberColumn(format="%.1f%%"), "Pitcher Whiff %": st.column_config.NumberColumn(format="%.1f%%"), "Pitcher HH %": st.column_config.NumberColumn(format="%.1f%%"), "Team HH %": st.column_config.NumberColumn(format="%.1f%%"), "HH_Delta": st.column_config.NumberColumn(format="%+.1f%%")}
                                         )
                             else:
                                 st.warning(f"Could not resolve player ID for {p_full}.")
                     except Exception as e:
-                        st.error(f"Error executing scan: {e}")
+                        st.error(f"Error executing scan: {e}") 
                         
 # ==========================================
 # TAB 4: THE BETTING PLAYBOOK
