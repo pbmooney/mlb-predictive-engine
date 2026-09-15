@@ -902,6 +902,15 @@ with tab3:
                         
     with edge_scanner_tab:
         st.markdown("#### 🚨 Targeted Slate Edge Scanner")
+        
+        # --- NEW SCANNER SETTINGS ---
+        st.markdown("##### ⚙️ Scanner Settings")
+        c1, c2 = st.columns(2)
+        min_usage = c1.slider("Minimum Pitch Usage %", min_value=10, max_value=35, value=20, step=1, key="edge_usage")
+        hh_delta_target = c2.slider("Max HH Suppression Delta (%)", min_value=-15.0, max_value=5.0, value=-3.0, step=0.5, 
+                                    help="Pitcher HH% - Team HH%. A negative number means the pitcher suppresses contact better than the team's average.", key="edge_hh")
+        st.markdown("---")
+
         col1, col2, col3 = st.columns(3)
         s1_p = col1.text_input("Pitcher Full Name", value="Tarik Skubal", key="s1_p").strip()
         s1_t = col1.selectbox("Opponent Team", mlb_teams, key="s1_t")
@@ -922,7 +931,7 @@ with tab3:
                         s_dt = (datetime.today() - timedelta(days=30)).strftime('%Y-%m-%d')
                         e_dt = datetime.today().strftime('%Y-%m-%d')
                         
-                        # Pull global statcast once for the slate scan to evaluate opponent vulnerabilities
+                        # Pull global statcast once for the slate scan
                         league_data = pyb.statcast(start_dt=s_dt, end_dt=e_dt)
                         if not league_data.empty:
                             league_data['batting_team'] = np.where(league_data['inning_topbot'] == 'Bot', league_data['home_team'], league_data['away_team'])
@@ -934,16 +943,30 @@ with tab3:
                             p_id = get_player_id(parts[0] if len(parts)>1 else "", parts[-1])
                             
                             if p_id:
-                                # Pull individual pitcher arsenal data
+                                # 1. PITCHER METRICS
                                 p_pitches = pyb.statcast_pitcher(s_dt, e_dt, p_id)
                                 if p_pitches.empty:
                                     st.warning(f"No recent tracking data found for {p_full}.")
                                     continue
                                     
-                                p_usage = p_pitches.groupby('pitch_name').agg(Pitches=('pitch_type', 'count')).reset_index()
-                                p_usage['Usage %'] = (p_usage['Pitches'] / p_usage['Pitches'].sum() * 100)
+                                p_pitches['is_swing'] = p_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'])
+                                p_pitches['is_whiff'] = p_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
+                                p_pitches['is_hard_hit'] = p_pitches['launch_speed'] >= 95
                                 
-                                # Pull true opponent macro vulnerability data
+                                p_perf = p_pitches.groupby('pitch_name').agg(
+                                    Pitches=('pitch_type', 'count'),
+                                    avg_velo=('release_speed', 'mean'),
+                                    P_Swings=('is_swing', 'sum'),
+                                    P_Whiffs=('is_whiff', 'sum'),
+                                    P_BBE=('launch_speed', 'count'),
+                                    P_Hard_Hits=('is_hard_hit', 'sum')
+                                ).reset_index()
+                                
+                                p_perf['Usage %'] = (p_perf['Pitches'] / p_perf['Pitches'].sum() * 100)
+                                p_perf['Pitcher Whiff %'] = (p_perf['P_Whiffs'] / p_perf['P_Swings'] * 100).fillna(0)
+                                p_perf['Pitcher HH %'] = (p_perf['P_Hard_Hits'] / p_perf['P_BBE'] * 100).fillna(0)
+                                
+                                # 2. OPPONENT TEAM METRICS
                                 if league_data.empty:
                                     st.warning("Global league data unavailable for opponent matching.")
                                     continue
@@ -953,30 +976,61 @@ with tab3:
                                 t_pitches['is_whiff'] = t_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
                                 t_pitches['is_hard_hit'] = t_pitches['launch_speed'] >= 95
                                 
-                                t_perf = t_pitches.groupby('pitch_name').agg(Swings=('is_swing', 'sum'), Whiffs=('is_whiff', 'sum'), BBE=('launch_speed', 'count'), Hard_Hits=('is_hard_hit', 'sum')).reset_index()
-                                t_perf['Team Whiff %'] = (t_perf['Whiffs'] / t_perf['Swings'] * 100).fillna(0)
-                                t_perf['Team Hard Hit %'] = (t_perf['Hard_Hits'] / t_perf['BBE'] * 100).fillna(0)
+                                t_perf = t_pitches.groupby('pitch_name').agg(
+                                    T_Swings=('is_swing', 'sum'),
+                                    T_Whiffs=('is_whiff', 'sum'),
+                                    T_BBE=('launch_speed', 'count'),
+                                    T_Hard_Hits=('is_hard_hit', 'sum')
+                                ).reset_index()
                                 
-                                # Merge pitcher usage with true opponent performance metrics
-                                matrix = p_usage.merge(t_perf[['pitch_name', 'Team Whiff %', 'Team Hard Hit %']], on='pitch_name', how='inner')
+                                t_perf['Team Whiff %'] = (t_perf['T_Whiffs'] / t_perf['T_Swings'] * 100).fillna(0)
+                                t_perf['Team HH %'] = (t_perf['T_Hard_Hits'] / t_perf['T_BBE'] * 100).fillna(0)
                                 
-                                if not matrix.empty:
-                                    primary = matrix.sort_values(by='Usage %', ascending=False).iloc[0]
+                                # 3. MERGE & CALCULATE DELTA
+                                matrix = p_perf.merge(t_perf[['pitch_name', 'Team Whiff %', 'Team HH %']], on='pitch_name', how='inner')
+                                qualified = matrix[matrix['Usage %'] >= min_usage].copy()
+                                qualified['HH_Delta'] = qualified['Pitcher HH %'] - qualified['Team HH %']
+                                
+                                # 4. SPLIT-WHIFF & DELTA EVALUATION
+                                fastball_types = ['4-Seam Fastball', 'Sinker', 'Cutter', 'FF', 'SI', 'FC']
+                                
+                                def evaluate_mismatch(row):
+                                    pitch = row['pitch_name']
+                                    whiff = row['Pitcher Whiff %']
+                                    delta = row['HH_Delta']
                                     
-                                    whiff_threshold = 18.0
-                                    hard_hit_threshold = 36.0
+                                    hh_suppression_pass = delta <= hh_delta_target
+                                    if pitch in fastball_types:
+                                        return (whiff >= 22.0) and hh_suppression_pass
+                                    else:
+                                        return (whiff >= 32.0) and hh_suppression_pass
+                                        
+                                if not qualified.empty:
+                                    qualified['Is_Edge'] = qualified.apply(evaluate_mismatch, axis=1)
+                                    edges = qualified[qualified['Is_Edge'] == True]
                                     
-                                    if primary['Usage %'] > 15:
-                                        if primary['Team Whiff %'] >= whiff_threshold:
-                                            st.success(f"🚨 **STRIKEOUT EDGE DETECTED: OVER Ks** ({primary['pitch_name']} Usage: {primary['Usage %']:.1f}%, Opponent Whiff Rate: {primary['Team Whiff %']:.1f}%)")
-                                        elif primary['Team Hard Hit %'] >= hard_hit_threshold:
-                                            st.error(f"🚨 **FADE PITCHER / OPPONENT OVER:** ({primary['pitch_name']} Opponent Hard Hit Rate: {primary['Team Hard Hit %']:.1f}%)")
-                                        else:
-                                            st.info(f"⚖️ Moderate Edge / Neutral Spot ({primary['pitch_name']} Usage: {primary['Usage %']:.1f}%, Opp. Whiff: {primary['Team Whiff %']:.1f}%)")
+                                    if edges.empty:
+                                        st.info(f"No pitches met the elite criteria against {team}.")
+                                    else:
+                                        st.success(f"🔥 **STRIKEOUT EDGE DETECTED:** Found {len(edges)} Elite Weapon(s) vs {team}")
+                                        st.dataframe(
+                                            edges[['pitch_name', 'Usage %', 'avg_velo', 'Pitcher Whiff %', 'Pitcher HH %', 'Team HH %', 'HH_Delta']],
+                                            use_container_width=True,
+                                            hide_index=True,
+                                            column_config={
+                                                "pitch_name": st.column_config.TextColumn("Pitch Type"),
+                                                "Usage %": st.column_config.NumberColumn("Usage", format="%.1f%%"),
+                                                "avg_velo": st.column_config.NumberColumn("Velo", format="%.1f"),
+                                                "Pitcher Whiff %": st.column_config.NumberColumn("Pitcher Whiff", format="%.1f%%"),
+                                                "Pitcher HH %": st.column_config.NumberColumn("Pitcher HH", format="%.1f%%"),
+                                                "Team HH %": st.column_config.NumberColumn("Opp Team HH", format="%.1f%%"),
+                                                "HH_Delta": st.column_config.NumberColumn("Suppression Delta", format="%+.1f%%"),
+                                            }
+                                        )
                             else:
                                 st.warning(f"Could not resolve player ID for {p_full}.")
                     except Exception as e:
-                        st.error(f"Error: {e}")
+                        st.error(f"Error executing scan: {e}")
                         
 # ==========================================
 # TAB 4: THE BETTING PLAYBOOK
