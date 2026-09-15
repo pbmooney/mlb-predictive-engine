@@ -1087,9 +1087,9 @@ with tab4:
     ---
     
     ### 4. The Automated Slate Edge Scanner (Execution Methodology)
-    The Edge Scanner in Tab 3 operationalizes all the underlying principles of this playbook into a single, automated screening engine. Instead of manually cross-referencing pitch usage against opponent vulnerabilities game by game, the scanner applies hard quantitative filters across a slate:
+    The Edge Scanner in Tab 3 operationalizes all the underlying principles of this playbook into a single, automated screening engine. Instead of manually cross-referencing pitch usage against opponent vulnerabilities game by game, the scanner applies strict, context-aware quantitative filters across a slate:
 
-    * **The 15/18 Strikeout Rule:** The scanner flags a high-confidence Pitcher Over Ks prop when a pitcher's primary weapon exceeds a 15% usage rate and generates an 18%+ Whiff Rate against that specific pitch type over the rolling window. This filters out noise and isolates true high-leverage strikeout environments.
-    * **The Hard-Hit Mismatch Rule:** Conversely, it flags a Team Total Over or fade opportunity when a high-usage primary pitch (>15%) intersects with a 36%+ Hard Hit rate against it. This identifies when a starting pitcher's go-to weapon is a mechanical liability.
-    * **Dynamic Threshold Tuning:** Because baseball sample sizes fluctuate, understanding why an edge triggers allows you to interpret the scanner's output with appropriate bankroll sizing—treating high-confidence convergence signals as primary targets while treating neutral outputs as pass-spots.
-""")
+    * **The Split-Whiff Rule (22% / 32%):** Not all whiffs are created equal. The scanner evaluates pitches against their specific movement baselines. Hard fastballs (4-Seamers, Sinkers, Cutters) must clear a 22%+ Whiff Rate, while breaking and offspeed pitches must clear a 32%+ threshold. This ensures only truly elite, bat-missing weapons are flagged for strikeout props.
+    * **The Hard-Hit Suppression Delta (Mismatch Rule):** A static hard-hit ceiling ignores opposing lineup quality. The scanner calculates the delta between the pitcher's allowed Hard-Hit % and the opposing team's baseline Hard-Hit % against that specific pitch type. A negative delta (e.g., -3.0%) guarantees the pitcher suppresses loud contact significantly better than the lineup typically produces, creating an immediate edge.
+    * **Dynamic Threshold Tuning:** Starter archetypes vary wildly. Use the scanner's sidebar sliders to adjust the minimum pitch usage (default 20%) to capture deep-arsenal pitchers, or aggressively tighten the Suppression Delta on large slates to isolate only the highest-confidence +EV target spots.
+    """)
