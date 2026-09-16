@@ -1096,9 +1096,21 @@ with tab4:
     ---
     
     ### 4. The Automated Slate Edge Scanner (Execution Methodology)
-    The Edge Scanner in Tab 3 operationalizes all the underlying principles of this playbook into a single, automated screening engine. Instead of manually cross-referencing pitch usage against opponent vulnerabilities game by game, the scanner applies strict, context-aware quantitative filters across a slate:
+    The Edge Scanner in Tab 3 is your automated betting engine. Instead of manually digging through game logs, it scans today's matchups and applies strict filters to find the biggest mismatches on the board. 
 
-    * **The Split-Whiff Rule (22% / 32%):** Not all whiffs are created equal. The scanner evaluates pitches against their specific movement baselines. Hard fastballs (4-Seamers, Sinkers, Cutters) must clear a 22%+ Whiff Rate, while breaking and offspeed pitches must clear a 32%+ threshold. This ensures only truly elite, bat-missing weapons are flagged for strikeout props.
-    * **The Hard-Hit Suppression Delta (Mismatch Rule):** A static hard-hit ceiling ignores opposing lineup quality. The scanner calculates the delta between the pitcher's allowed Hard-Hit % and the opposing team's baseline Hard-Hit % against that specific pitch type. A negative delta (e.g., -3.0%) guarantees the pitcher suppresses loud contact significantly better than the lineup typically produces, creating an immediate edge.
-    * **Dynamic Threshold Tuning:** Starter archetypes vary wildly. Use the scanner's sidebar sliders to adjust the minimum pitch usage (default 20%) to capture deep-arsenal pitchers, or aggressively tighten the Suppression Delta on large slates to isolate only the highest-confidence +EV target spots.
+    The scanner evaluates every pitch a starter throws using our **Split-Whiff Rule**: Hard fastballs must generate a 22%+ Whiff Rate, while breaking pitches (sliders, curveballs) must generate a 32%+ Whiff Rate. 
+
+    To fine-tune your hunt for the best bets, use the three sliders in the settings menu:
+
+    * **Min Pitch Usage % (The "No Fluke" Slider):** 
+      * *What it does:* Filters out pitches a guy barely uses. 
+      * *How to use it:* Keep this around **20%**. If a pitcher has a devastating curveball but only throws it 4 times a game, it won't help your strikeout bet. Dropping this to 15% helps evaluate pitchers with deep 5-pitch arsenals, while raising it to 25% isolates two-pitch power arms.
+    
+    * **Max HH Suppression Edge (Hunting for Strikeout Bets):** 
+      * *What it does:* Finds pitchers who naturally neutralize a specific lineup's power. It calculates the "Delta" (Pitcher Hard-Hit % minus Team Hard-Hit %). 
+      * *How to use it:* You want a **negative number** here (default is **-3.0%**). A -3.0% means the pitcher gives up 3% *less* hard contact than the opponent typically hits. When a pitch gets elite whiffs *and* suppresses hard contact, the scanner flags a green **STRIKEOUT EDGE DETECTED**. Bet the Pitcher Over Ks.
+    
+    * **Min HH Vulnerability Fade (Hunting for Team Overs):** 
+      * *What it does:* Catches pitchers who are throwing dangerous "meatballs" that a specific lineup excels at crushing. 
+      * *How to use it:* You want a **positive number** here (default is **+4.0%**). This means the pitcher allows 4% *more* hard contact on a specific pitch than the team's normal average. If a starter's main fastball triggers a red **FADE PITCHER** alert, they are mathematically walking into a trap. Bet the Opposing Team Total Over, or target home run props for their best hitters.
     """)
