@@ -743,7 +743,7 @@ with tab3:
         "🚨 Edge Scanner"
     ])
     
-    mlb_teams = ["ARI", "ATL", "BAL", "BOS", "CHC", "CIN", "CLE", "COL", "CWS", "DET", "HOU", "KC", "LAA", "LAD", "MIA", "MIL", "MIN", "NYM", "NYY", "OAK", "ATH", "PHI", "PIT", "SD", "SEA", "SF", "STL", "TB", "TEX", "TOR", "WSH"]
+    mlb_teams = ["ARI", "ATL", "BAL", "BOS", "CHC", "CIN", "CLE", "COL", "CWS", "DET", "HOU", "KC", "LAA", "LAD", "MIA", "MIL", "MIN", "NYM", "NYY", "ATH", "PHI", "PIT", "SD", "SEA", "SF", "STL", "TB", "TEX", "TOR", "WSH"]
 
     with sim_team_tab:
         st.markdown("#### 📊 Pitcher vs. Team (Historical Context)")
@@ -939,7 +939,9 @@ with tab3:
                             league_data['batting_team'] = np.where(league_data['inning_topbot'] == 'Bot', league_data['home_team'], league_data['away_team'])
                         
                         for p_full, team in matchups:
-                            scan_query_team = "ATH" if team == "OAK" else team
+                            # Map standard UI abbreviations to Statcast database abbreviations
+                            statcast_map = {"ARI": "AZ"}
+                            scan_query_team = statcast_map.get(team, team)
                             st.markdown(f"### 🔎 Scanning: {p_full} vs. {team}")
                             parts = p_full.split()
                             p_id = get_player_id(parts[0] if len(parts)>1 else "", parts[-1])
