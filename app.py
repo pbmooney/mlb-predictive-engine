@@ -1039,7 +1039,7 @@ with tab3:
                             else:
                                 st.warning(f"Could not resolve player ID for {p_full}.")
                     except Exception as e:
-                        st.error(f"Error executing scan: {e}") 
+                        st.error(f"Error executing scan: {e}")
                         
 # ==========================================
 # TAB 4: THE BETTING PLAYBOOK
