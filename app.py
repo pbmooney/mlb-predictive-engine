@@ -1016,7 +1016,6 @@ with tab3:
                                     edges = qualified[qualified['Is_Edge'] == True]
                                     
                                     # CONVERGENCE FADE CHECK (Team Over / Hitter Props)
-                                    # Both must be elevated (>=38%), and the blended expected contact must hit the target
                                     fade_mask = (
                                         (qualified['Pitcher HH %'] >= 38.0) & 
                                         (qualified['Team HH %'] >= 38.0) & 
@@ -1060,11 +1059,14 @@ with tab3:
                                                 "Projected_HH%": st.column_config.NumberColumn("Projected HH", format="%.1f%%")
                                             }
                                         )
-                                    else:
+                            else:
                                 st.warning(f"Could not resolve player ID for {p_full}.")
                     except Exception as e:
                         st.error(f"Error executing scan: {e}")
-                        
+
+# ==========================================
+# TAB 4: THE BETTING PLAYBOOK
+# ==========================================                        
 # ==========================================
 # TAB 4: THE BETTING PLAYBOOK
 # ==========================================
