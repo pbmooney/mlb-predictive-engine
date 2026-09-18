@@ -903,13 +903,13 @@ with tab3:
     with edge_scanner_tab:
         st.markdown("#### 🚨 Targeted Slate Edge Scanner")
         
-        # --- NEW SCANNER SETTINGS ---
+        # --- CALIBRATED SCANNER SETTINGS ---
         st.markdown("##### ⚙️ Scanner Settings")
         c1, c2, c3 = st.columns(3)
         min_usage = c1.slider("Min Pitch Usage %", min_value=10, max_value=35, value=20, step=1, key="edge_usage")
-        hh_delta_target = c2.slider("Max HH Suppression (Edge)", min_value=-15.0, max_value=0.0, value=-3.0, step=0.5, 
+        hh_delta_target = c2.slider("Max HH Suppression (Edge)", min_value=-15.0, max_value=0.0, value=-4.0, step=0.5, 
                                     help="Negative = Pitcher suppresses hard contact better than team avg.", key="edge_hh")
-        proj_hh_target = c3.slider("Min Projected HH% (Fade)", min_value=38.0, max_value=55.0, value=42.0, step=0.5, 
+        proj_hh_target = c3.slider("Min Projected HH% (Fade)", min_value=35.0, max_value=55.0, value=40.0, step=0.5, 
                                    help="Combined expected hard-hit rate (avg of pitcher & team). Flags dangerous contact environments.", key="fade_proj_hh")
         st.markdown("---")
 
@@ -938,10 +938,12 @@ with tab3:
                         if not league_data.empty:
                             league_data['batting_team'] = np.where(league_data['inning_topbot'] == 'Bot', league_data['home_team'], league_data['away_team'])
                         
+                        in_play_descriptions = ['hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score']
+
                         for p_full, team in matchups:
-                            # Map standard UI abbreviations to Statcast database abbreviations
                             statcast_map = {"ARI": "AZ"}
                             scan_query_team = statcast_map.get(team, team)
+                            
                             st.markdown(f"### 🔎 Scanning: {p_full} vs. {team}")
                             parts = p_full.split()
                             p_id = get_player_id(parts[0] if len(parts)>1 else "", parts[-1])
@@ -953,16 +955,20 @@ with tab3:
                                     st.warning(f"No recent tracking data found for {p_full}.")
                                     continue
                                     
-                                p_pitches['is_swing'] = p_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'])
+                                p_pitches['is_swing'] = p_pitches['description'].isin([
+                                    'swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 
+                                    'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'
+                                ])
                                 p_pitches['is_whiff'] = p_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
-                                p_pitches['is_hard_hit'] = p_pitches['launch_speed'] >= 95
+                                p_pitches['is_bbe'] = p_pitches['description'].isin(in_play_descriptions)
+                                p_pitches['is_hard_hit'] = (p_pitches['launch_speed'] >= 95) & p_pitches['is_bbe']
                                 
                                 p_perf = p_pitches.groupby('pitch_name').agg(
                                     Pitches=('pitch_type', 'count'),
                                     avg_velo=('release_speed', 'mean'),
                                     P_Swings=('is_swing', 'sum'),
                                     P_Whiffs=('is_whiff', 'sum'),
-                                    P_BBE=('launch_speed', 'count'),
+                                    P_BBE=('is_bbe', 'sum'),
                                     P_Hard_Hits=('is_hard_hit', 'sum')
                                 ).reset_index()
                                 
@@ -976,14 +982,18 @@ with tab3:
                                     continue
                                     
                                 t_pitches = league_data[league_data['batting_team'] == scan_query_team].copy()
-                                t_pitches['is_swing'] = t_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'])
+                                t_pitches['is_swing'] = t_pitches['description'].isin([
+                                    'swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 
+                                    'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'
+                                ])
                                 t_pitches['is_whiff'] = t_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
-                                t_pitches['is_hard_hit'] = t_pitches['launch_speed'] >= 95
+                                t_pitches['is_bbe'] = t_pitches['description'].isin(in_play_descriptions)
+                                t_pitches['is_hard_hit'] = (t_pitches['launch_speed'] >= 95) & t_pitches['is_bbe']
                                 
                                 t_perf = t_pitches.groupby('pitch_name').agg(
                                     T_Swings=('is_swing', 'sum'),
                                     T_Whiffs=('is_whiff', 'sum'),
-                                    T_BBE=('launch_speed', 'count'),
+                                    T_BBE=('is_bbe', 'sum'),
                                     T_Hard_Hits=('is_hard_hit', 'sum')
                                 ).reset_index()
                                 
@@ -1017,8 +1027,8 @@ with tab3:
                                     
                                     # CONVERGENCE FADE CHECK (Team Over / Hitter Props)
                                     fade_mask = (
-                                        (qualified['Pitcher HH %'] >= 38.0) & 
-                                        (qualified['Team HH %'] >= 38.0) & 
+                                        (qualified['Pitcher HH %'] >= 35.0) & 
+                                        (qualified['Team HH %'] >= 35.0) & 
                                         (qualified['Projected_HH%'] >= proj_hh_target)
                                     )
                                     fades = qualified[fade_mask]
@@ -1063,7 +1073,7 @@ with tab3:
                                 st.warning(f"Could not resolve player ID for {p_full}.")
                     except Exception as e:
                         st.error(f"Error executing scan: {e}")
-
+                        
 # ==========================================
 # TAB 4: THE BETTING PLAYBOOK
 # ==========================================                        
