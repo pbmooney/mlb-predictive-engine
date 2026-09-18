@@ -909,8 +909,8 @@ with tab3:
         min_usage = c1.slider("Min Pitch Usage %", min_value=10, max_value=35, value=20, step=1, key="edge_usage")
         hh_delta_target = c2.slider("Max HH Suppression (Edge)", min_value=-15.0, max_value=0.0, value=-3.0, step=0.5, 
                                     help="Negative = Pitcher suppresses hard contact better than team avg.", key="edge_hh")
-        fade_delta_target = c3.slider("Min HH Vulnerability (Fade)", min_value=1.0, max_value=15.0, value=4.0, step=0.5, 
-                                    help="Positive = Pitcher allows MORE hard contact than team avg.", key="fade_hh")
+        proj_hh_target = c3.slider("Min Projected HH% (Fade)", min_value=38.0, max_value=55.0, value=42.0, step=0.5, 
+                                   help="Combined expected hard-hit rate (avg of pitcher & team). Flags dangerous contact environments.", key="fade_proj_hh")
         st.markdown("---")
 
         col1, col2, col3 = st.columns(3)
@@ -990,12 +990,13 @@ with tab3:
                                 t_perf['Team Whiff %'] = (t_perf['T_Whiffs'] / t_perf['T_Swings'] * 100).fillna(0)
                                 t_perf['Team HH %'] = (t_perf['T_Hard_Hits'] / t_perf['T_BBE'] * 100).fillna(0)
                                 
-                                # 3. MERGE & CALCULATE DELTA
+                                # 3. MERGE & CALCULATE METRICS
                                 matrix = p_perf.merge(t_perf[['pitch_name', 'Team Whiff %', 'Team HH %']], on='pitch_name', how='inner')
                                 qualified = matrix[matrix['Usage %'] >= min_usage].copy()
                                 qualified['HH_Delta'] = qualified['Pitcher HH %'] - qualified['Team HH %']
+                                qualified['Projected_HH%'] = (qualified['Pitcher HH %'] + qualified['Team HH %']) / 2.0
                                 
-                                # 4. SPLIT-WHIFF & DELTA EVALUATION
+                                # 4. SPLIT-WHIFF & FADE EVALUATION
                                 fastball_types = ['4-Seam Fastball', 'Sinker', 'Cutter', 'FF', 'SI', 'FC']
                                 
                                 def evaluate_edge(row):
@@ -1010,12 +1011,18 @@ with tab3:
                                         return (whiff >= 32.0) and hh_suppression_pass
                                         
                                 if not qualified.empty:
-                                    # POSITIVE EDGE CHECK
+                                    # POSITIVE EDGE CHECK (Strikeout Props)
                                     qualified['Is_Edge'] = qualified.apply(evaluate_edge, axis=1)
                                     edges = qualified[qualified['Is_Edge'] == True]
                                     
-                                    # NEGATIVE FADE CHECK
-                                    fades = qualified[qualified['HH_Delta'] >= fade_delta_target]
+                                    # CONVERGENCE FADE CHECK (Team Over / Hitter Props)
+                                    # Both must be elevated (>=38%), and the blended expected contact must hit the target
+                                    fade_mask = (
+                                        (qualified['Pitcher HH %'] >= 38.0) & 
+                                        (qualified['Team HH %'] >= 38.0) & 
+                                        (qualified['Projected_HH%'] >= proj_hh_target)
+                                    )
+                                    fades = qualified[fade_mask]
                                     
                                     # DISPLAY POSITIVE EDGES
                                     if edges.empty:
@@ -1025,20 +1032,35 @@ with tab3:
                                         st.dataframe(
                                             edges[['pitch_name', 'Usage %', 'avg_velo', 'Pitcher Whiff %', 'Pitcher HH %', 'Team HH %', 'HH_Delta']],
                                             use_container_width=True, hide_index=True,
-                                            column_config={"Usage %": st.column_config.NumberColumn(format="%.1f%%"), "Pitcher Whiff %": st.column_config.NumberColumn(format="%.1f%%"), "Pitcher HH %": st.column_config.NumberColumn(format="%.1f%%"), "Team HH %": st.column_config.NumberColumn(format="%.1f%%"), "HH_Delta": st.column_config.NumberColumn(format="%+.1f%%")}
+                                            column_config={
+                                                "pitch_name": st.column_config.TextColumn("Pitch Type"),
+                                                "Usage %": st.column_config.NumberColumn("Usage", format="%.1f%%"),
+                                                "avg_velo": st.column_config.NumberColumn("Velo", format="%.1f"),
+                                                "Pitcher Whiff %": st.column_config.NumberColumn("Pitcher Whiff", format="%.1f%%"),
+                                                "Pitcher HH %": st.column_config.NumberColumn("Pitcher HH", format="%.1f%%"),
+                                                "Team HH %": st.column_config.NumberColumn("Opp Team HH", format="%.1f%%"),
+                                                "HH_Delta": st.column_config.NumberColumn("Suppression Delta", format="%+.1f%%")
+                                            }
                                         )
 
-                                    # DISPLAY NEGATIVE FADES
+                                    # DISPLAY FADES (CONVERGENCE MISMATCHES)
                                     if fades.empty:
                                         st.info(f"🛡️ No severe vulnerabilities detected against {team}.")
                                     else:
                                         st.error(f"🚨 **FADE PITCHER / OPPONENT OVER DETECTED:** {len(fades)} Liability Pitch(es) vs {team}")
                                         st.dataframe(
-                                            fades[['pitch_name', 'Usage %', 'avg_velo', 'Pitcher Whiff %', 'Pitcher HH %', 'Team HH %', 'HH_Delta']],
+                                            fades[['pitch_name', 'Usage %', 'avg_velo', 'Pitcher HH %', 'Team HH %', 'Projected_HH%']],
                                             use_container_width=True, hide_index=True,
-                                            column_config={"Usage %": st.column_config.NumberColumn(format="%.1f%%"), "Pitcher Whiff %": st.column_config.NumberColumn(format="%.1f%%"), "Pitcher HH %": st.column_config.NumberColumn(format="%.1f%%"), "Team HH %": st.column_config.NumberColumn(format="%.1f%%"), "HH_Delta": st.column_config.NumberColumn(format="%+.1f%%")}
+                                            column_config={
+                                                "pitch_name": st.column_config.TextColumn("Pitch Type"),
+                                                "Usage %": st.column_config.NumberColumn("Usage", format="%.1f%%"),
+                                                "avg_velo": st.column_config.NumberColumn("Velo", format="%.1f"),
+                                                "Pitcher HH %": st.column_config.NumberColumn("Pitcher HH", format="%.1f%%"),
+                                                "Team HH %": st.column_config.NumberColumn("Opp Team HH", format="%.1f%%"),
+                                                "Projected_HH%": st.column_config.NumberColumn("Projected HH", format="%.1f%%")
+                                            }
                                         )
-                            else:
+                                    else:
                                 st.warning(f"Could not resolve player ID for {p_full}.")
                     except Exception as e:
                         st.error(f"Error executing scan: {e}")
