@@ -1132,21 +1132,21 @@ with tab4:
     ---
     
     ### 4. The Automated Slate Edge Scanner (Execution Methodology)
-    The Edge Scanner in Tab 3 is your automated betting engine. Instead of manually digging through game logs, it scans today's matchups and applies strict filters to find the biggest mismatches on the board. 
+    The Edge Scanner in Tab 3 is your automated slate screener. Instead of digging through pitch logs by hand, it scans every primary pitch a starter throws against the opposing lineup's trailing 30-day performance.
 
-    The scanner evaluates every pitch a starter throws using our **Split-Whiff Rule**: Hard fastballs must generate a 22%+ Whiff Rate, while breaking pitches (sliders, curveballs) must generate a 32%+ Whiff Rate. 
+    The scanner tests pitches against our **Split-Whiff Rule**: Hard fastballs must generate a 22%+ Whiff Rate, while breaking and offspeed pitches must clear 32%+.
 
-    To fine-tune your hunt for the best bets, use the three sliders in the settings menu:
+    Use the three sliders in the settings panel to steer the hunt:
 
-    * **Min Pitch Usage % (The "No Fluke" Slider):** 
-      * *What it does:* Filters out pitches a guy barely uses. 
-      * *How to use it:* Keep this around **20%**. If a pitcher has a devastating curveball but only throws it 4 times a game, it won't help your strikeout bet. Dropping this to 15% helps evaluate pitchers with deep 5-pitch arsenals, while raising it to 25% isolates two-pitch power arms.
-    
-    * **Max HH Suppression Edge (Hunting for Strikeout Bets):** 
-      * *What it does:* Finds pitchers who naturally neutralize a specific lineup's power. It calculates the "Delta" (Pitcher Hard-Hit % minus Team Hard-Hit %). 
-      * *How to use it:* You want a **negative number** here (default is **-3.0%**). A -3.0% means the pitcher gives up 3% *less* hard contact than the opponent typically hits. When a pitch gets elite whiffs *and* suppresses hard contact, the scanner flags a green **STRIKEOUT EDGE DETECTED**. Bet the Pitcher Over Ks.
-    
-    * **Min HH Vulnerability Fade (Hunting for Team Overs):** 
-      * *What it does:* Catches pitchers who are throwing dangerous "meatballs" that a specific lineup excels at crushing. 
-      * *How to use it:* You want a **positive number** here (default is **+4.0%**). This means the pitcher allows 4% *more* hard contact on a specific pitch than the team's normal average. If a starter's main fastball triggers a red **FADE PITCHER** alert, they are mathematically walking into a trap. Bet the Opposing Team Total Over, or target home run props for their best hitters.
+    * **Min Pitch Usage % (The "Relevance" Slider):**
+      * *What it means:* Filters out pitches the starter rarely throws.
+      * *How to set it:* Keep this around **20%**. A pitcher might have an unhittable sweeper, but if he only throws it 5% of the time, it won't drive a strikeout prop. Lower to 15% for pitchers with deep 5-pitch arsenals; bump to 25% for two-pitch power arms.
+
+    * **Max HH Suppression Edge (The "Muzzle" Slider — Strikeout Props):**
+      * *What it means:* Measures how much the pitcher *quiets* the opponent's bats compared to what that lineup normally does. It calculates the difference (**Pitcher Hard-Hit % minus Team Hard-Hit %**).
+      * *How to set it:* Look for a **negative number** (default is **-4.0%**). If an opponent usually hits fastballs hard 42% of the time, but this starter only gives up hard contact on it 35% of the time, he has a **-7.0% Suppression Delta**—he completely muzzles their power. When a pitch misses bats *and* suppresses loud contact, you get a green **STRIKEOUT EDGE DETECTED** alert. Bet **Pitcher Over Ks**.
+
+    * **Min Projected HH% (The "Danger Zone" Slider — Fades & Overs):**
+      * *What it means:* Predicts the combined hard contact when a vulnerable pitch collides with an aggressive lineup. Instead of comparing differences, it blends the two numbers to estimate how often the ball will come off the bat at 95+ mph.
+      * *How to set it:* Set a **percentage ceiling** (default is **40.0%**). MLB average hard-hit rate is around 38%. If a starter allows 44% hard contact on his sinker and the opposing lineup hits sinkers at 44% hard contact, their combined projection is **44.0%**—well into the danger zone. When this happens, you get a red **FADE PITCHER / OPPONENT OVER DETECTED** alert. Target **Opposing Team Total Over** or hitter total bases.
     """)
