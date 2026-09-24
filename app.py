@@ -41,6 +41,55 @@ def get_pitcher_arsenal_stats(p_id, days):
     
     return usage.merge(perf[['pitch_name', 'Whiff %', 'Hard Hit %']], on='pitch_name', how='inner')
 
+def calculate_h2h_stats(pitcher_df, batter_id):
+  """Extracts direct career head-to-head outcomes from Statcast data."""
+  if pitcher_df is None or pitcher_df.empty:
+    return None
+
+  h2h = pitcher_df[pitcher_df["batter"] == batter_id]
+  if h2h.empty:
+    return None
+
+  total_pitches = len(h2h)
+  pas = h2h[["game_pk", "at_bat_number"]].drop_duplicates()
+  pa_count = len(pas)
+
+  events = h2h["events"].dropna().tolist()
+  hits_list = ["single", "double", "triple", "home_run"]
+  hits = sum(1 for e in events if e in hits_list)
+  hrs = events.count("home_run")
+  strikeouts = sum(1 for e in events if "strikeout" in e)
+  walks = sum(1 for e in events if "walk" in e)
+  hbp = events.count("hit_by_pitch")
+  sac_flies = events.count("sac_fly")
+
+  ab_count = max(0, pa_count - (walks + hbp + sac_flies))
+  avg = (hits / ab_count) if ab_count > 0 else 0.0
+
+  singles = events.count("single")
+  doubles = events.count("double")
+  triples = events.count("triple")
+  total_bases = singles + (2 * doubles) + (3 * triples) + (4 * hrs)
+  slg = (total_bases / ab_count) if ab_count > 0 else 0.0
+
+  obp_denom = ab_count + walks + hbp + sac_flies
+  obp = (hits + walks + hbp) / obp_denom if obp_denom > 0 else 0.0
+  ops = obp + slg
+
+  return {
+      "pa": pa_count,
+      "ab": ab_count,
+      "hits": hits,
+      "hr": hrs,
+      "so": strikeouts,
+      "bb": walks,
+      "pitches": total_pitches,
+      "avg": f"{avg:.3f}".lstrip("0") if avg < 1 else f"{avg:.3f}",
+      "obp": f"{obp:.3f}".lstrip("0") if obp < 1 else f"{obp:.3f}",
+      "slg": f"{slg:.3f}".lstrip("0") if slg < 1 else f"{slg:.3f}",
+      "ops": f"{ops:.3f}",
+  }
+
 # --- ORIGINAL STABLE PLAYER ID LOOKUP ---
 @st.cache_data
 def get_player_id(first, last):
