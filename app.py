@@ -105,57 +105,90 @@ MLB_TEAM_TO_CODE = {
 }
 
 @st.cache_data(ttl=3600)
-def get_league_statcast_cached(start_date, end_date):
-    try:
-        df = pyb.statcast(start_dt=start_date, end_dt=end_date, verbose=False)
-        if df is not None and not df.empty:
-            df['batting_team'] = np.where(df['inning_topbot'] == 'Bot', df['home_team'], df['away_team'])
-            return df
-    except Exception:
-        pass
-    return pd.DataFrame()
-
 def get_team_pitch_performance(team_input, start_date, end_date):
-    """Returns a dictionary mapping pitch_name -> (Team Whiff %, Team Hard Hit %)"""
-    try:
-        code = MLB_TEAM_TO_CODE.get(team_input.strip(), team_input.strip())
-        if code == "ARI":
-            code = "AZ"
+  """Pulls Option 2: How this entire team hits each pitch type across the league."""
+  try:
+    code = MLB_TEAM_TO_CODE.get(team_input.strip(), team_input.strip())
+    # Savant uses 'AZ' for Arizona
+    if code in ["ARI", "Arizona Diamondbacks"]:
+      code = "AZ"
 
-        league = get_league_statcast_cached(start_date, end_date)
-        if league.empty:
-            return {}
+    # Pull Statcast data with team parameter
+    # To prevent Savant timeouts, we pull directly for the team
+    raw = pyb.statcast(
+        start_dt=start_date, end_dt=end_date, team=code, verbose=False
+    )
 
-        t_pitches = league[league['batting_team'] == code].copy()
-        if t_pitches.empty:
-            return {}
+    if raw is None or raw.empty:
+      # Fallback: if team code query returned empty, check reverse code
+      alt_code = "ARI" if code == "AZ" else code
+      raw = pyb.statcast(
+          start_dt=start_date, end_dt=end_date, team=alt_code, verbose=False
+      )
 
-        t_pitches['pitch_name'] = t_pitches['pitch_name'].dropna().astype(str).str.strip()
+    if raw is None or raw.empty:
+      return {}
 
-        in_play_descriptions = ['hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score']
-        t_pitches['is_swing'] = t_pitches['description'].isin([
-            'swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 
-            'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'
-        ])
-        t_pitches['is_whiff'] = t_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
-        t_pitches['is_bbe'] = t_pitches['description'].isin(in_play_descriptions)
-        t_pitches['is_hard_hit'] = (t_pitches['launch_speed'] >= 95) & t_pitches['is_bbe']
+    # Option 2 filter: Only keep pitches where THIS team was BATTING
+    # Home team bats in Bottom ('Bot'), Away team bats in Top ('Top')
+    is_batting = (
+        (raw["home_team"].isin([code, "ARI", "AZ"]))
+        & (raw["inning_topbot"] == "Bot")
+    ) | (
+        (raw["away_team"].isin([code, "ARI", "AZ"]))
+        & (raw["inning_topbot"] == "Top")
+    )
 
-        team_dict = {}
-        for p_name, group in t_pitches.groupby('pitch_name'):
-            sw = group['is_swing'].sum()
-            wh = group['is_whiff'].sum()
-            bbe = group['is_bbe'].sum()
-            hh = group['is_hard_hit'].sum()
+    t_pitches = raw[is_batting].copy()
+    if t_pitches.empty:
+      return {}
 
-            tw = (wh / sw * 100) if sw > 0 else 0.0
-            thh = (hh / bbe * 100) if bbe > 0 else 0.0
-            team_dict[p_name] = {"Team Whiff %": tw, "Team Hard Hit %": thh}
+    t_pitches["pitch_name"] = (
+        t_pitches["pitch_name"].dropna().astype(str).str.strip()
+    )
 
-        return team_dict
-    except Exception:
-        return {}
-        
+    in_play_descriptions = [
+        "hit_into_play",
+        "hit_into_play_no_out",
+        "hit_into_play_score",
+    ]
+    t_pitches["is_swing"] = t_pitches["description"].isin([
+        "swinging_strike",
+        "swinging_strike_blocked",
+        "foul",
+        "foul_tip",
+        "hit_into_play",
+        "hit_into_play_no_out",
+        "hit_into_play_score",
+        "missed_bunt",
+    ])
+    t_pitches["is_whiff"] = t_pitches["description"].isin(
+        ["swinging_strike", "swinging_strike_blocked", "missed_bunt"]
+    )
+    t_pitches["is_bbe"] = t_pitches["description"].isin(in_play_descriptions)
+    t_pitches["is_hard_hit"] = (t_pitches["launch_speed"] >= 95) & t_pitches[
+        "is_bbe"
+    ]
+
+    team_dict = {}
+    for p_name, group in t_pitches.groupby("pitch_name"):
+      sw = group["is_swing"].sum()
+      wh = group["is_whiff"].sum()
+      bbe = group["is_bbe"].sum()
+      hh = group["is_hard_hit"].sum()
+
+      tw = (wh / sw * 100) if sw > 0 else 0.0
+      thh = (hh / bbe * 100) if bbe > 0 else 0.0
+      team_dict[p_name] = {"Team Whiff %": tw, "Team Hard Hit %": thh}
+
+    return team_dict
+
+  except Exception as e:
+    # Print to your terminal so you can see if something actually broke
+    print(f"Statcast team pull error: {e}")
+    return {}
+
+
 # --- ORIGINAL STABLE PLAYER ID LOOKUP ---
 @st.cache_data
 def get_player_id(first, last):
