@@ -106,7 +106,6 @@ MLB_TEAM_TO_CODE = {
 
 @st.cache_data(ttl=3600)
 def get_league_statcast_cached(start_date, end_date):
-    """Pulls and caches date range once so queries are fast."""
     try:
         df = pyb.statcast(start_dt=start_date, end_dt=end_date, verbose=False)
         if df is not None and not df.empty:
@@ -117,43 +116,46 @@ def get_league_statcast_cached(start_date, end_date):
     return pd.DataFrame()
 
 def get_team_pitch_performance(team_input, start_date, end_date):
-    """Filters cached Statcast data for opponent batting metrics (exact Edge Scanner logic)."""
-    # Resolves full name to code, or keeps existing 3-letter code
-    code = MLB_TEAM_TO_CODE.get(team_input.strip(), team_input.strip())
-    if code == "ARI":
-        code = "AZ"
+    """Returns a dictionary mapping pitch_name -> (Team Whiff %, Team Hard Hit %)"""
+    try:
+        code = MLB_TEAM_TO_CODE.get(team_input.strip(), team_input.strip())
+        if code == "ARI":
+            code = "AZ"
 
-    league = get_league_statcast_cached(start_date, end_date)
-    if league.empty:
-        return pd.DataFrame()
+        league = get_league_statcast_cached(start_date, end_date)
+        if league.empty:
+            return {}
 
-    t_pitches = league[league['batting_team'] == code].copy()
-    if t_pitches.empty:
-        return pd.DataFrame()
+        t_pitches = league[league['batting_team'] == code].copy()
+        if t_pitches.empty:
+            return {}
 
-    t_pitches['pitch_name'] = t_pitches['pitch_name'].dropna().astype(str).str.strip()
+        t_pitches['pitch_name'] = t_pitches['pitch_name'].dropna().astype(str).str.strip()
 
-    in_play_descriptions = ['hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score']
-    t_pitches['is_swing'] = t_pitches['description'].isin([
-        'swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 
-        'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'
-    ])
-    t_pitches['is_whiff'] = t_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
-    t_pitches['is_bbe'] = t_pitches['description'].isin(in_play_descriptions)
-    t_pitches['is_hard_hit'] = (t_pitches['launch_speed'] >= 95) & t_pitches['is_bbe']
+        in_play_descriptions = ['hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score']
+        t_pitches['is_swing'] = t_pitches['description'].isin([
+            'swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 
+            'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'
+        ])
+        t_pitches['is_whiff'] = t_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
+        t_pitches['is_bbe'] = t_pitches['description'].isin(in_play_descriptions)
+        t_pitches['is_hard_hit'] = (t_pitches['launch_speed'] >= 95) & t_pitches['is_bbe']
 
-    t_perf = t_pitches.groupby('pitch_name').agg(
-        T_Swings=('is_swing', 'sum'),
-        T_Whiffs=('is_whiff', 'sum'),
-        T_BBE=('is_bbe', 'sum'),
-        T_Hard_Hits=('is_hard_hit', 'sum')
-    ).reset_index()
+        team_dict = {}
+        for p_name, group in t_pitches.groupby('pitch_name'):
+            sw = group['is_swing'].sum()
+            wh = group['is_whiff'].sum()
+            bbe = group['is_bbe'].sum()
+            hh = group['is_hard_hit'].sum()
 
-    t_perf['Team Whiff %'] = (t_perf['T_Whiffs'] / t_perf['T_Swings'] * 100).fillna(0)
-    t_perf['Team Hard Hit %'] = (t_perf['T_Hard_Hits'] / t_perf['T_BBE'] * 100).fillna(0)
+            tw = (wh / sw * 100) if sw > 0 else 0.0
+            thh = (hh / bbe * 100) if bbe > 0 else 0.0
+            team_dict[p_name] = {"Team Whiff %": tw, "Team Hard Hit %": thh}
 
-    return t_perf[['pitch_name', 'Team Whiff %', 'Team Hard Hit %']]
-
+        return team_dict
+    except Exception:
+        return {}
+        
 # --- ORIGINAL STABLE PLAYER ID LOOKUP ---
 @st.cache_data
 def get_player_id(first, last):
@@ -1117,53 +1119,46 @@ with tab3:
                             st.warning(f"⚠️ No recent pitching data found for {matrix_pitcher_full}.")
                             st.stop()
 
-                        # Sanitize pitch names and drop NaNs
                         p_pitches = p_pitches.dropna(subset=['pitch_name']).copy()
                         p_pitches['pitch_name'] = p_pitches['pitch_name'].astype(str).str.strip()
 
-                        # Classify pitcher swings & whiffs
                         p_pitches['is_swing'] = p_pitches['description'].isin([
                             'swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 
                             'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'
                         ])
                         p_pitches['is_whiff'] = p_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
 
-                        # Aggregate pitcher arsenal in a single groupby (guaranteed unique pitch_name)
-                        p_arsenal = p_pitches.groupby('pitch_name', as_index=False).agg(
-                            Pitches=('pitch_type', 'count'),
-                            avg_velo=('release_speed', 'mean'),
-                            p_swings=('is_swing', 'sum'),
-                            p_whiffs=('is_whiff', 'sum')
-                        )
-                        p_arsenal['Pitcher Usage %'] = (p_arsenal['Pitches'] / p_arsenal['Pitches'].sum() * 100)
-                        p_arsenal['Pitcher Whiff %'] = (p_arsenal['p_whiffs'] / p_arsenal['p_swings'] * 100).fillna(0)
+                        # 2. Get Team Lookup Dictionary
+                        team_dict = get_team_pitch_performance(matrix_team, start_date, end_date)
 
-                        # 2. Team Batting Performance (league-wide)
-                        team_perf = get_team_pitch_performance(matrix_team, start_date, end_date)
+                        # 3. Build clean rows manually (Zero pandas merge conflicts)
+                        rows = []
+                        total_pitches = len(p_pitches)
 
-                        if team_perf is not None and not team_perf.empty:
-                            # Clean team pitch names and dedup before merge
-                            team_perf['pitch_name'] = team_perf['pitch_name'].astype(str).str.strip()
-                            team_perf = team_perf.drop_duplicates(subset=['pitch_name'])
+                        for p_name, group in p_pitches.groupby('pitch_name'):
+                            p_count = len(group)
+                            usage = (p_count / total_pitches * 100) if total_pitches > 0 else 0.0
+                            velo = group['release_speed'].mean()
                             
-                            # Clean left join on 1-to-1 unique pitch_name
-                            matrix = pd.merge(
-                                p_arsenal[['pitch_name', 'Pitcher Usage %', 'avg_velo', 'Pitcher Whiff %']],
-                                team_perf[['pitch_name', 'Team Whiff %', 'Team Hard Hit %']],
-                                on='pitch_name',
-                                how='left'
-                            )
-                        else:
-                            matrix = p_arsenal[['pitch_name', 'Pitcher Usage %', 'avg_velo', 'Pitcher Whiff %']].copy()
-                            matrix['Team Whiff %'] = 0.0
-                            matrix['Team Hard Hit %'] = 0.0
+                            swings = group['is_swing'].sum()
+                            whiffs = group['is_whiff'].sum()
+                            p_whiff_pct = (whiffs / swings * 100) if swings > 0 else 0.0
 
-                        # Fill unmatched pitch metrics with 0.0
-                        matrix['Team Whiff %'] = matrix['Team Whiff %'].fillna(0.0)
-                        matrix['Team Hard Hit %'] = matrix['Team Hard Hit %'].fillna(0.0)
-                        
-                        # Reset index to eliminate any duplicate index artifacts
-                        matrix = matrix.sort_values(by='Pitcher Usage %', ascending=False).reset_index(drop=True)
+                            # Lookup team stats from dictionary safely
+                            t_stats = team_dict.get(p_name, {"Team Whiff %": 0.0, "Team Hard Hit %": 0.0})
+
+                            rows.append({
+                                "pitch_name": p_name,
+                                "Pitcher Usage %": usage,
+                                "avg_velo": velo,
+                                "Pitcher Whiff %": p_whiff_pct,
+                                "Team Whiff %": t_stats["Team Whiff %"],
+                                "Team Hard Hit %": t_stats["Team Hard Hit %"]
+                            })
+
+                        matrix = pd.DataFrame(rows)
+                        if not matrix.empty:
+                            matrix = matrix.sort_values(by='Pitcher Usage %', ascending=False).reset_index(drop=True)
 
                         st.markdown(f"**Arsenal Matchup: {matrix_pitcher_full} vs. {matrix_team} (Trailing {lookback_days_team} Days)**")
                         st.dataframe(
@@ -1181,7 +1176,7 @@ with tab3:
                         )
                     except Exception as e:
                         st.error(f"Error running matrix: {e}")
-
+                        
     
     with edge_scanner_tab:
         st.markdown("#### 🚨 Targeted Slate Edge Scanner")
