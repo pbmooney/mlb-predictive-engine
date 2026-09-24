@@ -1099,10 +1099,10 @@ with tab3:
 
         if st.button("Run Arsenal Matrix", key="btn_matrix"):
             if matrix_pitcher_full:
-                with st.spinner(f"Pulling {matrix_pitcher_full}'s arsenal vs. {matrix_team}'s batting profile..."):
+                with st.spinner(f"Matching {matrix_pitcher_full}'s arsenal against {matrix_team}'s profile..."):
                     try:
                         name_parts = matrix_pitcher_full.split()
-                        p_id = get_player_id(name_parts[0] if len(name_parts)>1 else "", name_parts[-1])
+                        p_id = get_player_id(name_parts[0] if len(name_parts) > 1 else "", name_parts[-1])
                         
                         if not p_id:
                             st.error(f"❌ Could not find player ID for **'{matrix_pitcher_full}'**. Check spelling.")
@@ -1111,46 +1111,60 @@ with tab3:
                         start_date = (datetime.today() - timedelta(days=lookback_days_team)).strftime('%Y-%m-%d')
                         end_date = datetime.today().strftime('%Y-%m-%d')
                         
-                        # 1. Pitcher Data (Usage & Velocity)
+                        # 1. Pitcher Data
                         p_pitches = pyb.statcast_pitcher(start_date, end_date, p_id)
-                        
                         if p_pitches is None or p_pitches.empty:
                             st.warning(f"⚠️ No recent pitching data found for {matrix_pitcher_full}.")
                             st.stop()
 
+                        # Sanitize pitch names and drop NaNs
+                        p_pitches = p_pitches.dropna(subset=['pitch_name']).copy()
                         p_pitches['pitch_name'] = p_pitches['pitch_name'].astype(str).str.strip()
-                        p_usage = p_pitches.groupby('pitch_name').agg(
+
+                        # Classify pitcher swings & whiffs
+                        p_pitches['is_swing'] = p_pitches['description'].isin([
+                            'swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 
+                            'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'
+                        ])
+                        p_pitches['is_whiff'] = p_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
+
+                        # Aggregate pitcher arsenal in a single groupby (guaranteed unique pitch_name)
+                        p_arsenal = p_pitches.groupby('pitch_name', as_index=False).agg(
                             Pitches=('pitch_type', 'count'),
-                            avg_velo=('release_speed', 'mean')
-                        ).reset_index()
-                        p_usage['Pitcher Usage %'] = (p_usage['Pitches'] / p_usage['Pitches'].sum() * 100)
+                            avg_velo=('release_speed', 'mean'),
+                            p_swings=('is_swing', 'sum'),
+                            p_whiffs=('is_whiff', 'sum')
+                        )
+                        p_arsenal['Pitcher Usage %'] = (p_arsenal['Pitches'] / p_arsenal['Pitches'].sum() * 100)
+                        p_arsenal['Pitcher Whiff %'] = (p_arsenal['p_whiffs'] / p_arsenal['p_swings'] * 100).fillna(0)
 
-                        # Pitcher's own baseline Whiff% across all batters
-                        p_swings = p_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'])
-                        p_whiffs = p_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
-                        p_pitches['p_sw'] = p_swings
-                        p_pitches['p_wh'] = p_whiffs
-                        p_base = p_pitches.groupby('pitch_name').agg(p_sw=('p_sw', 'sum'), p_wh=('p_wh', 'sum')).reset_index()
-                        p_base['Pitcher Whiff %'] = (p_base['p_wh'] / p_base['p_sw'] * 100).fillna(0)
-                        
-                        p_arsenal = p_usage.merge(p_base[['pitch_name', 'Pitcher Whiff %']], on='pitch_name', how='left')
-
-                        # 2. Opponent Team Batting Profile
+                        # 2. Team Batting Performance (league-wide)
                         team_perf = get_team_pitch_performance(matrix_team, start_date, end_date)
 
-                        if team_perf.empty:
-                            st.warning(f"⚠️ No league-wide offensive tracking found for {matrix_team} in this lookback window.")
-                            matrix = p_arsenal.copy()
+                        if team_perf is not None and not team_perf.empty:
+                            # Clean team pitch names and dedup before merge
+                            team_perf['pitch_name'] = team_perf['pitch_name'].astype(str).str.strip()
+                            team_perf = team_perf.drop_duplicates(subset=['pitch_name'])
+                            
+                            # Clean left join on 1-to-1 unique pitch_name
+                            matrix = pd.merge(
+                                p_arsenal[['pitch_name', 'Pitcher Usage %', 'avg_velo', 'Pitcher Whiff %']],
+                                team_perf[['pitch_name', 'Team Whiff %', 'Team Hard Hit %']],
+                                on='pitch_name',
+                                how='left'
+                            )
+                        else:
+                            matrix = p_arsenal[['pitch_name', 'Pitcher Usage %', 'avg_velo', 'Pitcher Whiff %']].copy()
                             matrix['Team Whiff %'] = 0.0
                             matrix['Team Hard Hit %'] = 0.0
-                        else:
-                            # 3. Stylistic Merge: Pitcher Arsenal x Opponent Vulnerability
-                            matrix = p_arsenal.merge(team_perf, on='pitch_name', how='left')
-                            matrix['Team Whiff %'] = matrix['Team Whiff %'].fillna(0)
-                            matrix['Team Hard Hit %'] = matrix['Team Hard Hit %'].fillna(0)
 
-                        matrix = matrix.sort_values(by='Pitcher Usage %', ascending=False)
+                        # Fill unmatched pitch metrics with 0.0
+                        matrix['Team Whiff %'] = matrix['Team Whiff %'].fillna(0.0)
+                        matrix['Team Hard Hit %'] = matrix['Team Hard Hit %'].fillna(0.0)
                         
+                        # Reset index to eliminate any duplicate index artifacts
+                        matrix = matrix.sort_values(by='Pitcher Usage %', ascending=False).reset_index(drop=True)
+
                         st.markdown(f"**Arsenal Matchup: {matrix_pitcher_full} vs. {matrix_team} (Trailing {lookback_days_team} Days)**")
                         st.dataframe(
                             matrix[['pitch_name', 'Pitcher Usage %', 'avg_velo', 'Pitcher Whiff %', 'Team Whiff %', 'Team Hard Hit %']], 
