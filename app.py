@@ -90,6 +90,81 @@ def calculate_h2h_stats(pitcher_df, batter_id):
       "ops": f"{ops:.3f}",
   }
 
+@st.cache_data(ttl=3600)  # Cache for 1 hour so switching teams/pitchers is snappy
+def get_team_pitch_performance(team_abbr, start_date, end_date):
+  """Pulls Statcast data for all pitches seen by a specific team and aggregates
+
+  Whiff% and Hard-Hit% by pitch name.
+  """
+  try:
+    # Query team batting events in Statcast for this date range
+    # In pybaseball, statcast() with team filter pulls games involving that team
+    raw_team = pyb.statcast(start_dt=start_date, end_dt=end_date, team=team_abbr)
+    if raw_team is None or raw_team.empty:
+      return pd.DataFrame()
+
+    # Filter strictly for when this team is batting:
+    # If team is home, they bat when inning_topbot == 'Bot'
+    # If team is away, they bat when inning_topbot == 'Top'
+    is_batting = (
+        (raw_team["home_team"] == team_abbr)
+        & (raw_team["inning_topbot"] == "Bot")
+    ) | (
+        (raw_team["away_team"] == team_abbr)
+        & (raw_team["inning_topbot"] == "Top")
+    )
+    df = raw_team[is_batting].copy()
+
+    if df.empty or "pitch_name" not in df.columns:
+      return pd.DataFrame()
+
+    df["pitch_name"] = df["pitch_name"].astype(str).str.strip()
+
+    # Identify swings, whiffs, and hard-hit balls
+    df["is_swing"] = df["description"].isin([
+        "swinging_strike",
+        "swinging_strike_blocked",
+        "foul",
+        "foul_tip",
+        "hit_into_play",
+        "hit_into_play_no_out",
+        "hit_into_play_score",
+        "missed_bunt",
+    ])
+    df["is_whiff"] = df["description"].isin(
+        ["swinging_strike", "swinging_strike_blocked", "missed_bunt"]
+    )
+    df["is_hard_hit"] = df["launch_speed"] >= 95
+
+    # Aggregate by pitch type
+    team_perf = (
+        df.groupby("pitch_name")
+        .agg(
+            Pitches_Faced=("pitch_type", "count"),
+            Swings=("is_swing", "sum"),
+            Whiffs=("is_whiff", "sum"),
+            BBE=("launch_speed", "count"),
+            Hard_Hits=("is_hard_hit", "sum"),
+        )
+        .reset_index()
+    )
+
+    team_perf["Team Whiff %"] = (
+        team_perf["Whiffs"] / team_perf["Swings"] * 100
+    ).fillna(0)
+    team_perf["Team Hard Hit %"] = (
+        team_perf["Hard_Hits"] / team_perf["BBE"] * 100
+    ).fillna(0)
+
+    return team_perf[[
+        "pitch_name",
+        "Pitches_Faced",
+        "Team Whiff %",
+        "Team Hard Hit %",
+    ]]
+  except Exception:
+    return pd.DataFrame()
+
 # --- ORIGINAL STABLE PLAYER ID LOOKUP ---
 @st.cache_data
 def get_player_id(first, last):
