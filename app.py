@@ -105,50 +105,54 @@ MLB_TEAM_TO_CODE = {
 }
 
 @st.cache_data(ttl=3600)
-def get_team_pitch_performance(team_name, start_date, end_date):
-    """Pulls true team batting performance across all games (identical to Edge Scanner)."""
+def get_league_statcast_cached(start_date, end_date):
+    """Pulls and caches date range once so queries are fast."""
     try:
-        team_code = MLB_TEAM_TO_CODE.get(team_name, team_name)
-        if team_code == "ARI":
-            team_code = "AZ"
-
-        # Pull all pitches thrown in this team's games
-        raw = pyb.statcast(start_dt=start_date, end_dt=end_date, team=team_code, verbose=False)
-        if raw is None or raw.empty:
-            return pd.DataFrame()
-
-        # Identify batting team
-        raw['batting_team'] = np.where(raw['inning_topbot'] == 'Bot', raw['home_team'], raw['away_team'])
-        t_pitches = raw[raw['batting_team'] == team_code].copy()
-        
-        if t_pitches.empty or 'pitch_name' not in t_pitches.columns:
-            return pd.DataFrame()
-
-        t_pitches['pitch_name'] = t_pitches['pitch_name'].dropna().astype(str).str.strip()
-
-        in_play_descriptions = ['hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score']
-        t_pitches['is_swing'] = t_pitches['description'].isin([
-            'swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 
-            'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'
-        ])
-        t_pitches['is_whiff'] = t_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
-        t_pitches['is_bbe'] = t_pitches['description'].isin(in_play_descriptions)
-        t_pitches['is_hard_hit'] = (t_pitches['launch_speed'] >= 95) & t_pitches['is_bbe']
-
-        t_perf = t_pitches.groupby('pitch_name').agg(
-            T_Swings=('is_swing', 'sum'),
-            T_Whiffs=('is_whiff', 'sum'),
-            T_BBE=('is_bbe', 'sum'),
-            T_Hard_Hits=('is_hard_hit', 'sum')
-        ).reset_index()
-
-        t_perf['Team Whiff %'] = (t_perf['T_Whiffs'] / t_perf['T_Swings'] * 100).fillna(0)
-        t_perf['Team Hard Hit %'] = (t_perf['T_Hard_Hits'] / t_perf['T_BBE'] * 100).fillna(0)
-
-        return t_perf[['pitch_name', 'Team Whiff %', 'Team Hard Hit %']]
+        df = pyb.statcast(start_dt=start_date, end_dt=end_date, verbose=False)
+        if df is not None and not df.empty:
+            df['batting_team'] = np.where(df['inning_topbot'] == 'Bot', df['home_team'], df['away_team'])
+            return df
     except Exception:
+        pass
+    return pd.DataFrame()
+
+def get_team_pitch_performance(team_input, start_date, end_date):
+    """Filters cached Statcast data for opponent batting metrics (exact Edge Scanner logic)."""
+    # Resolves full name to code, or keeps existing 3-letter code
+    code = MLB_TEAM_TO_CODE.get(team_input.strip(), team_input.strip())
+    if code == "ARI":
+        code = "AZ"
+
+    league = get_league_statcast_cached(start_date, end_date)
+    if league.empty:
         return pd.DataFrame()
 
+    t_pitches = league[league['batting_team'] == code].copy()
+    if t_pitches.empty:
+        return pd.DataFrame()
+
+    t_pitches['pitch_name'] = t_pitches['pitch_name'].dropna().astype(str).str.strip()
+
+    in_play_descriptions = ['hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score']
+    t_pitches['is_swing'] = t_pitches['description'].isin([
+        'swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 
+        'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'
+    ])
+    t_pitches['is_whiff'] = t_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
+    t_pitches['is_bbe'] = t_pitches['description'].isin(in_play_descriptions)
+    t_pitches['is_hard_hit'] = (t_pitches['launch_speed'] >= 95) & t_pitches['is_bbe']
+
+    t_perf = t_pitches.groupby('pitch_name').agg(
+        T_Swings=('is_swing', 'sum'),
+        T_Whiffs=('is_whiff', 'sum'),
+        T_BBE=('is_bbe', 'sum'),
+        T_Hard_Hits=('is_hard_hit', 'sum')
+    ).reset_index()
+
+    t_perf['Team Whiff %'] = (t_perf['T_Whiffs'] / t_perf['T_Swings'] * 100).fillna(0)
+    t_perf['Team Hard Hit %'] = (t_perf['T_Hard_Hits'] / t_perf['T_BBE'] * 100).fillna(0)
+
+    return t_perf[['pitch_name', 'Team Whiff %', 'Team Hard Hit %']]
 
 # --- ORIGINAL STABLE PLAYER ID LOOKUP ---
 @st.cache_data
