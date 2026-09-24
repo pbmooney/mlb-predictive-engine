@@ -1025,7 +1025,7 @@ with tab3:
         st.markdown("---")
 
         col1, col2, col3 = st.columns(3)
-        s1_p = col1.text_input("Pitcher Full Name (Exact Spelling, e.g., Gerrit Cole)", value="Tarik Skubal", key="s1_p").strip()
+        s1_p = col1.text_input("Pitcher Full Name (Exact Spelling)", value="Tarik Skubal", key="s1_p").strip()
         s1_t = col1.selectbox("Opponent Team", mlb_teams, key="s1_t")
         s2_p = col2.text_input("Pitcher Full Name", value="Paul Skenes", key="s2_p").strip()
         s2_t = col2.selectbox("Opponent Team", mlb_teams, index=2, key="s2_t")
