@@ -1102,69 +1102,162 @@ with tab3:
                     st.error(f"Error: {e}")
                     
     with sim_team_matrix_tab:
-        st.markdown("#### ⚾ Pitcher vs. Team (Arsenal Matrix)")
-        col_p, col_t, col_d = st.columns(3)
-        matrix_pitcher_full = col_p.text_input("Pitcher Full Name", value="Tarik Skubal", key="matrix_p2").strip()
-        matrix_team = col_t.selectbox("Opposing Team", mlb_teams, key="matrix_t2")
-        lookback_days_team = col_d.slider("Lookback Window (Days)", min_value=7, max_value=45, value=30, step=1, key="matrix_l_days")
+      st.markdown("#### ⚾ Pitcher vs. Team (Arsenal Matrix)")
+      col_p, col_t, col_d = st.columns(3)
+      matrix_pitcher_full = col_p.text_input(
+          "Pitcher Full Name (Exact Spelling)",
+          value="Tarik Skubal",
+          key="matrix_p2",
+      ).strip()
+      matrix_team = col_t.selectbox(
+          "Opposing Team", mlb_teams, key="matrix_t2"
+      )
+      lookback_days_team = col_d.slider(
+          "Lookback Window (Days)",
+          min_value=7,
+          max_value=45,
+          value=30,
+          step=1,
+          key="matrix_l_days",
+      )
 
-        if st.button("Run Arsenal Matrix", key="btn_matrix"):
-            if matrix_pitcher_full:
-                with st.spinner("Pulling pitcher matrix data..."):
-                    try:
-                        name_parts = matrix_pitcher_full.split()
-                        p_id = get_player_id(name_parts[0] if len(name_parts)>1 else "", name_parts[-1])
-                        
-                        if not p_id:
-                            st.warning(f"Could not find player ID for {matrix_pitcher_full}.")
-                        else:
-                            start_date = (datetime.today() - timedelta(days=lookback_days_team)).strftime('%Y-%m-%d')
-                            end_date = datetime.today().strftime('%Y-%m-%d')
-                            
-                            p_pitches = pyb.statcast_pitcher(start_date, end_date, p_id)
-                            
-                            if p_pitches is None or p_pitches.empty:
-                                st.warning(f"No recent pitching data found for {matrix_pitcher_full}.")
-                            else:
-                                p_pitches['pitch_name'] = p_pitches['pitch_name'].str.strip()
-                                p_usage = p_pitches.groupby('pitch_name').agg(
-                                    Pitches=('pitch_type', 'count'),
-                                    avg_velo=('release_speed', 'mean')
-                                ).reset_index()
-                                
-                                p_usage['Usage %'] = (p_usage['Pitches'] / p_usage['Pitches'].sum() * 100)
-                                
-                                p_pitches['is_swing'] = p_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'])
-                                p_pitches['is_whiff'] = p_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
-                                p_pitches['is_hard_hit'] = p_pitches['launch_speed'] >= 95
-                                
-                                t_perf = p_pitches.groupby('pitch_name').agg(
-                                    Swings=('is_swing', 'sum'),
-                                    Whiffs=('is_whiff', 'sum'),
-                                    BBE=('launch_speed', 'count'),
-                                    Hard_Hits=('is_hard_hit', 'sum')
-                                ).reset_index()
-                                
-                                t_perf['Whiff %'] = (t_perf['Whiffs'] / t_perf['Swings'] * 100).fillna(0)
-                                t_perf['Hard Hit %'] = (t_perf['Hard_Hits'] / t_perf['BBE'] * 100).fillna(0)
-                                
-                                matrix = p_usage.merge(t_perf[['pitch_name', 'Whiff %', 'Hard Hit %']], on='pitch_name', how='left').fillna(0).sort_values(by='Usage %', ascending=False)
-                                
-                                st.markdown(f"**Arsenal Matrix: {matrix_pitcher_full} vs. {matrix_team} (Trailing {lookback_days_team} Days)**")
-                                st.dataframe(
-                                    matrix[['pitch_name', 'Usage %', 'avg_velo', 'Whiff %', 'Hard Hit %']], 
-                                    use_container_width=True,
-                                    hide_index=True,
-                                    column_config={
-                                        "pitch_name": st.column_config.TextColumn("Pitch Type"),
-                                        "Usage %": st.column_config.NumberColumn("Pitcher Usage %", format="%.1f%%"),
-                                        "avg_velo": st.column_config.NumberColumn("Avg Velo (mph)", format="%.1f"),
-                                        "Whiff %": st.column_config.NumberColumn("Pitch Whiff %", format="%.1f%%"),
-                                        "Hard Hit %": st.column_config.NumberColumn("Pitch Hard-Hit %", format="%.1f%%"),
-                                    }
-                                )
-                    except Exception as e:
-                        st.error(f"Error running matrix: {e}")
+      if st.button("Run Arsenal Matrix", key="btn_matrix"):
+        if matrix_pitcher_full:
+          with st.spinner(
+              f"Pulling {matrix_pitcher_full} arsenal vs. {matrix_team}..."
+          ):
+            try:
+              name_parts = matrix_pitcher_full.split()
+              p_id = get_player_id(
+                  name_parts[0] if len(name_parts) > 1 else "", name_parts[-1]
+              )
+
+              if not p_id:
+                st.error(
+                    f"❌ Could not find player ID for **'{matrix_pitcher_full}'**."
+                    " Check spelling."
+                )
+                st.stop()
+
+              start_date = (
+                  datetime.today() - timedelta(days=lookback_days_team)
+              ).strftime("%Y-%m-%d")
+              end_date = datetime.today().strftime("%Y-%m-%d")
+
+              # 1. Pitcher's Arsenal Data
+              p_pitches = pyb.statcast_pitcher(start_date, end_date, p_id)
+
+              if p_pitches is None or p_pitches.empty:
+                st.warning(
+                    f"⚠️ No recent pitching data found for"
+                    f" {matrix_pitcher_full}."
+                )
+                st.stop()
+
+              p_pitches["pitch_name"] = (
+                  p_pitches["pitch_name"].astype(str).str.strip()
+              )
+
+              # Pitcher Whiff% metrics across all batters faced
+              p_pitches["is_swing"] = p_pitches["description"].isin([
+                  "swinging_strike",
+                  "swinging_strike_blocked",
+                  "foul",
+                  "foul_tip",
+                  "hit_into_play",
+                  "hit_into_play_no_out",
+                  "hit_into_play_score",
+                  "missed_bunt",
+              ])
+              p_pitches["is_whiff"] = p_pitches["description"].isin(
+                  ["swinging_strike", "swinging_strike_blocked", "missed_bunt"]
+              )
+
+              p_arsenal = (
+                  p_pitches.groupby("pitch_name")
+                  .agg(
+                      Pitches=("pitch_type", "count"),
+                      avg_velo=("release_speed", "mean"),
+                      p_swings=("is_swing", "sum"),
+                      p_whiffs=("is_whiff", "sum"),
+                  )
+                  .reset_index()
+              )
+
+              p_arsenal["Usage %"] = (
+                  p_arsenal["Pitches"] / p_arsenal["Pitches"].sum() * 100
+              )
+              p_arsenal["Pitcher Whiff %"] = (
+                  p_arsenal["p_whiffs"] / p_arsenal["p_swings"] * 100
+              ).fillna(0)
+
+              # 2. Opponent Team's Performance Against Each Pitch Type
+              team_splits = get_team_pitch_performance(
+                  matrix_team, start_date, end_date
+              )
+
+              # 3. Merge Pitcher Arsenal with Opponent Vulnerability
+              if not team_splits.empty:
+                matrix = p_arsenal.merge(
+                    team_splits[[
+                        "pitch_name",
+                        "Team Whiff %",
+                        "Team Hard Hit %",
+                    ]],
+                    on="pitch_name",
+                    how="left",
+                ).fillna(0)
+              else:
+                matrix = p_arsenal.copy()
+                matrix["Team Whiff %"] = 0.0
+                matrix["Team Hard Hit %"] = 0.0
+
+              matrix = matrix.sort_values(by="Usage %", ascending=False)
+
+              st.markdown(
+                  f"**Arsenal Matchup: {matrix_pitcher_full} vs. {matrix_team}"
+                  f" (Trailing {lookback_days_team} Days)**"
+              )
+              st.dataframe(
+                  matrix[[
+                      "pitch_name",
+                      "Usage %",
+                      "avg_velo",
+                      "Pitcher Whiff %",
+                      "Team Whiff %",
+                      "Team Hard Hit %",
+                  ]],
+                  use_container_width=True,
+                  hide_index=True,
+                  column_config={
+                      "pitch_name": st.column_config.TextColumn("Pitch Type"),
+                      "Usage %": st.column_config.NumberColumn(
+                          "Pitcher Usage %", format="%.1f%%"
+                      ),
+                      "avg_velo": st.column_config.NumberColumn(
+                          "Avg Velo (mph)", format="%.1f"
+                      ),
+                      "Pitcher Whiff %": st.column_config.NumberColumn(
+                          "Pitcher Whiff %", format="%.1f%%"
+                      ),
+                      "Team Whiff %": st.column_config.NumberColumn(
+                          f"{matrix_team} Whiff %", format="%.1f%%"
+                      ),
+                      "Team Hard Hit %": st.column_config.NumberColumn(
+                          f"{matrix_team} Hard-Hit %", format="%.1f%%"
+                      ),
+                  },
+              )
+
+              if team_splits.empty:
+                st.info(
+                    f"ℹ️ Note: No offensive Statcast data returned for"
+                    f" {matrix_team} in the last {lookback_days_team} days. Team"
+                    " columns set to 0%."
+                )
+
+            except Exception as e:
+              st.error(f"Error running matrix: {e}")
                         
     with edge_scanner_tab:
         st.markdown("#### 🚨 Targeted Slate Edge Scanner")
