@@ -971,30 +971,61 @@ with tab3:
                     b_parts = pvb_b_full.split()
                     p_id = get_player_id(p_parts[0] if len(p_parts)>1 else "", p_parts[-1])
                     b_id = get_player_id(b_parts[0] if len(b_parts)>1 else "", b_parts[-1])
+
+                    # Catch invalid names immediately instead of failing silently
+                    if not p_id:
+                        st.error(f"❌ Could not find pitcher: **'{pvb_p_full}'**. Please check spelling.")
+                        st.stop()
+                    if not b_id:
+                        st.error(f"❌ Could not find batter: **'{pvb_b_full}'**. Please check spelling.")
+                        st.stop()
                     
-                    if p_id and b_id:
-                        start_dt = (datetime.today() - timedelta(days=lookback_days)).strftime('%Y-%m-%d')
-                        end_dt = datetime.today().strftime('%Y-%m-%d')
-                        p_pitches = pyb.statcast_pitcher(start_dt, end_dt, p_id)
-                        b_pitches = pyb.statcast_batter(start_dt, end_dt, b_id)
+                    start_dt = (datetime.today() - timedelta(days=lookback_days)).strftime('%Y-%m-%d')
+                    end_dt = datetime.today().strftime('%Y-%m-%d')
+                    p_pitches = pyb.statcast_pitcher(start_dt, end_dt, p_id)
+                    b_pitches = pyb.statcast_batter(start_dt, end_dt, b_id)
+                    
+                    if not p_pitches.empty and not b_pitches.empty:
+                        p_usage = p_pitches.groupby('pitch_name').agg(Pitcher_Pitches=('pitch_type', 'count'), Avg_Velo=('release_speed', 'mean')).reset_index()
+                        p_usage['Usage %'] = (p_usage['Pitcher_Pitches'] / p_usage['Pitcher_Pitches'].sum() * 100)
                         
-                        if not p_pitches.empty and not b_pitches.empty:
-                            p_usage = p_pitches.groupby('pitch_name').agg(Pitcher_Pitches=('pitch_type', 'count'), Avg_Velo=('release_speed', 'mean')).reset_index()
-                            p_usage['Usage %'] = (p_usage['Pitcher_Pitches'] / p_usage['Pitcher_Pitches'].sum() * 100)
-                            
-                            b_pitches['is_swing'] = b_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'])
-                            b_pitches['is_whiff'] = b_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
-                            b_pitches['is_hard_hit'] = b_pitches['launch_speed'] >= 95
-                            
-                            b_perf = b_pitches.groupby('pitch_name').agg(Swings=('is_swing', 'sum'), Whiffs=('is_whiff', 'sum'), BBE=('launch_speed', 'count'), Hard_Hits=('is_hard_hit', 'sum')).reset_index()
-                            b_perf['Batter Whiff %'] = (b_perf['Whiffs'] / b_perf['Swings'] * 100).fillna(0)
-                            b_perf['Batter Hard Hit %'] = (b_perf['Hard_Hits'] / b_perf['BBE'] * 100).fillna(0)
-                            
-                            matrix = p_usage.merge(b_perf, on='pitch_name', how='inner').sort_values(by='Usage %', ascending=False)
-                            st.dataframe(matrix[['pitch_name', 'Usage %', 'Avg_Velo', 'Batter Whiff %', 'Batter Hard Hit %']], hide_index=True)
+                        b_pitches['is_swing'] = b_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score', 'missed_bunt'])
+                        b_pitches['is_whiff'] = b_pitches['description'].isin(['swinging_strike', 'swinging_strike_blocked', 'missed_bunt'])
+                        b_pitches['is_hard_hit'] = b_pitches['launch_speed'] >= 95
+                        
+                        b_perf = b_pitches.groupby('pitch_name').agg(Swings=('is_swing', 'sum'), Whiffs=('is_whiff', 'sum'), BBE=('launch_speed', 'count'), Hard_Hits=('is_hard_hit', 'sum')).reset_index()
+                        b_perf['Batter Whiff %'] = (b_perf['Whiffs'] / b_perf['Swings'] * 100).fillna(0)
+                        b_perf['Batter Hard Hit %'] = (b_perf['Hard_Hits'] / b_perf['BBE'] * 100).fillna(0)
+                        
+                        matrix = p_usage.merge(b_perf, on='pitch_name', how='inner').sort_values(by='Usage %', ascending=False)
+                        st.dataframe(matrix[['pitch_name', 'Usage %', 'Avg_Velo', 'Batter Whiff %', 'Batter Hard Hit %']], hide_index=True)
+
+                        # --- DIRECT HEAD-TO-HEAD CARD ---
+                        st.divider()
+                        st.subheader("Direct Head-to-Head History")
+                        h2h = calculate_h2h_stats(p_pitches, b_id)
+
+                        if h2h:
+                            c1, c2, c3, c4, c5 = st.columns(5)
+                            c1.metric("PAs (Pitches)", f"{h2h['pa']} ({h2h['pitches']})")
+                            c2.metric("Hits / AB", f"{h2h['hits']} / {h2h['ab']}")
+                            c3.metric("HR", h2h['hr'])
+                            c4.metric("K", h2h['so'])
+                            c5.metric("BB", h2h['bb'])
+
+                            s1, s2, s3, s4 = st.columns(4)
+                            s1.metric("BA", h2h['avg'])
+                            s1_label = "OBP" # keeping columns tidy
+                            s2.metric("OBP", h2h['obp'])
+                            s3.metric("SLG", h2h['slg'])
+                            s4.metric("OPS", h2h['ops'])
+                        else:
+                            st.info("No direct head-to-head Statcast history found in this lookback window. (Rely on Arsenal Matrix profile above).")
+                    else:
+                        st.warning("⚠️ Insufficient pitch records returned for this timeframe.")
                 except Exception as e:
                     st.error(f"Error: {e}")
-
+                    
     with sim_team_matrix_tab:
         st.markdown("#### ⚾ Pitcher vs. Team (Arsenal Matrix)")
         col_p, col_t, col_d = st.columns(3)
