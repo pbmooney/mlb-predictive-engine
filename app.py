@@ -249,7 +249,7 @@ if "run_query" not in st.session_state:
 if st.sidebar.button("Get Stats"):
     st.session_state.run_query = True
 
-tab1, tab2, tab3, tab4 = st.tabs(["Player Dashboard", "Team Matchups", "Matchup Simulator Hub", "📖 Betting Playbook"])
+tab1, tab2, tab3, tab4 = st.tabs(["Matchup Simulator Hub", "Player Dashboard", "Strikeout Prop Targets", "📖 Betting Playbook"])
 
 # ==========================================
 # TAB 1: PLAYER DASHBOARD
