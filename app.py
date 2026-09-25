@@ -190,71 +190,46 @@ def get_statcast_data(player_id, days, player_type):
     else:
         return pyb.statcast_pitcher(start_dt=start_dt, end_dt=end_dt, player_id=player_id)
 
-# --- SIDEBAR UI ---
-st.sidebar.header("Search Primary Player")
-player_type = st.sidebar.radio("Player Type", ["Batter", "Pitcher"])
-
-first_name = st.sidebar.text_input("First Name", "Aaron")
-last_name = st.sidebar.text_input("Last Name", "Judge")
-days_back = st.sidebar.slider("Days of History", 15, 1000, 365) 
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("Specific Matchup (Optional)")
-st.sidebar.caption(f"Filter by a specific opposing {'Pitcher' if player_type == 'Batter' else 'Batter'}.")
-opp_first = st.sidebar.text_input("Opponent First Name", "")
-opp_last = st.sidebar.text_input("Opponent Last Name", "")
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("Situational Splits")
-
-if player_type == "Batter":
-    opp_hand = st.sidebar.radio("Opposing Pitcher Hand", ["All", "RHP", "LHP"])
-else:
-    opp_hand = st.sidebar.radio("Opposing Batter Hand", ["All", "RHB", "LHB"])
-    
-location = st.sidebar.radio("Location", ["All", "Home", "Away"])
-
-# --- SIDEBAR: DAILY EDGE REPORT ---
-st.sidebar.markdown("---")
-st.sidebar.subheader("📋 Daily Edge Report")
-
-if 'edge_report' not in st.session_state:
-    st.session_state.edge_report = []
-
-if len(st.session_state.edge_report) > 0:
-    st.sidebar.write(f"**{len(st.session_state.edge_report)}** +EV spots saved.")
-    
-    report_df = pd.DataFrame(st.session_state.edge_report)
-    csv = report_df.to_csv(index=False).encode('utf-8')
-    
-    st.sidebar.download_button(
-        label="📥 Download CSV Report",
-        data=csv,
-        file_name=f"Edge_Report_{datetime.today().strftime('%Y%m%d')}.csv",
-        mime="text/csv"
-    )
-    
-    if st.sidebar.button("Clear Report"):
-        st.session_state.edge_report = []
-        st.rerun()
-else:
-    st.sidebar.caption("No +EV spots saved yet. Run the calculator to find edges!")
-
-# --- MAIN APP LOGIC ---
-st.title("MLB Props Dashboard")
-
-if "run_query" not in st.session_state:
-    st.session_state.run_query = False
-
-if st.sidebar.button("Get Stats"):
-    st.session_state.run_query = True
-
 tab_sim, tab_player, tab_k_props, tab_playbook = st.tabs(["Matchup Simulator Hub", "Player Dashboard", "Strikeout Prop Targets", "📖 Betting Playbook"])
 
 # ==========================================
-# TAB 1: PLAYER DASHBOARD
+# TAB: PLAYER DASHBOARD
 # ==========================================
 with tab_player:
+    st.subheader("👤 Search Primary Player")
+
+    # Primary search controls organized across responsive columns
+    col_type, col_first, col_last, col_days = st.columns([1.2, 1.5, 1.5, 2])
+    player_type = col_type.radio("Player Type", ["Batter", "Pitcher"], key="dash_player_type")
+    first_name = col_first.text_input("First Name", "Aaron", key="dash_first_name")
+    last_name = col_last.text_input("Last Name", "Judge", key="dash_last_name")
+    days_back = col_days.slider("Days of History", 15, 1000, 365, key="dash_days_back")
+
+    # Optional Matchup & Situational Splits inside an expander to preserve mobile screen real estate
+    with st.expander("🎯 Situational Splits & Specific Matchup (Optional)"):
+        opp_label = "Pitcher" if player_type == "Batter" else "Batter"
+        m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+        
+        opp_first = m_col1.text_input(f"Opp. {opp_label} First", "", key="dash_opp_first")
+        opp_last = m_col2.text_input(f"Opp. {opp_label} Last", "", key="dash_opp_last")
+
+        if player_type == "Batter":
+            opp_hand = m_col3.selectbox("Opposing Pitcher Hand", ["All", "RHP", "LHP"], key="dash_opp_hand")
+        else:
+            opp_hand = m_col3.selectbox("Opposing Batter Hand", ["All", "RHB", "LHB"], key="dash_opp_hand")
+            
+        location = m_col4.selectbox("Location", ["All", "Home", "Away"], key="dash_location")
+
+    # Action trigger button
+    if "run_query" not in st.session_state:
+        st.session_state.run_query = False
+
+    if st.button("🔍 Get Stats", type="primary", use_container_width=True):
+        st.session_state.run_query = True
+
+    st.markdown("---")
+
+    # Execution Engine
     if st.session_state.run_query:
         player_id = get_player_id(first_name, last_name)
         
@@ -300,6 +275,7 @@ with tab_player:
                 
                 if not data.empty:
                     st.success(f"Successfully pulled {len(data)} pitches for {first_name} {last_name}!")
+
                     
                     # ==========================================================
                     # MODE A: H2H MICRO VIEW (Opponent Specified)
