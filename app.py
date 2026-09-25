@@ -1375,7 +1375,7 @@ with tab_playbook:
 
     ---
     
-    ### 4. The Automated Slate Edge Scanner (Execution Methodology)
+    #### The Automated Slate Edge Scanner (Execution Methodology)
     The Edge Scanner in Tab 3 is your automated slate screener. Instead of digging through pitch logs by hand, it scans every primary pitch a starter throws against the opposing lineup's trailing 30-day performance.
 
     The scanner tests pitches against our **Split-Whiff Rule**: Hard fastballs must generate a 22%+ Whiff Rate, while breaking and offspeed pitches must clear 32%+.
@@ -1405,10 +1405,10 @@ with tab_playbook:
     
     ---
     
-    ### Strikeout Prop Target (Exploiting Macro Vulnerabilities)
-    The Team Matchups tab evaluates the holistic 9-man lineup and pitching staff dynamics. This is where you find structural edges that dictate Moneyline, Run Line, and Team Total bets.
-    
-    * **Bullpen Exhaustion & Leverage:** A starting pitcher might only be projected for 5.0 innings. If this tab reveals that a team's top three high-leverage relievers pitched the last two consecutive days, the back-half of the game is mathematically unprotected. Target the **Full Game Opponent Team Total Over**.
-    * **Granular Platoon Splits:** The public bets on basic Left vs. Right splits. Use this tab to dig deeper: Does a team hit LHP well overall, but struggle specifically on the road? Do they have a high wRC+ but also a massive strikeout rate against righties? Use these specific splits to find hidden value in **Team Strikeout Totals**.
-    * **Run Environment Context:** Combine team offensive profiles with park factors. A fly-ball heavy lineup playing in a warm, hitter-friendly environment presents a massive edge for **First 5 Innings Over** wagers, whereas a ground-ball heavy team neutralizes those same park factors.
+    ### Strikeout Prop Targets (Exploiting Platoon Asymmetries)
+    The Strikeout Prop Targets tab isolates how an opposing lineup handles specific throwing arms from their surface-level team statistics. The market routinely prices pitcher strikeout props using 162-game baseline averages; you use this tab to exploit extreme handedness splits (vs. RHP / vs. LHP).
+
+    * **The High-K Funnel (Targeting Pitcher Overs):** A lineup might appear competent overall, but maintain a league-worst 25%+ Strikeout Rate specifically against lefties due to a righty-heavy platoon flaw. When a swing-and-miss southpaw faces this split, their floor rises dramatically—bet the **Pitcher Strikeout Over** before oddsmakers bake in the matchup penalty.
+    * **The Contact Trap (Targeting Ace Unders):** Public aces often carry inflated strikeout totals (6.5 or 7.5) purely off reputation. If the opposing offense ranks among the elite in contact against that pitcher's throwing arm (sub-18% K-rate), they foul off pitches and drive pitch counts sky-high early. Capitalize on the efficiency squeeze by betting the **Pitcher Strikeout Under**.
+    * **Right-Tail Ladders (Alternate Strikeout Lines):** When an above-average whiff pitcher matches up with an opponent that strikes out at a 26%+ clip against their handedness, the probability distribution shifts heavily to the upside. Leverage this specific vulnerability by laddering alternate lines (**6+, 7+, and 8+ Ks**) at plus-money rather than playing a juiced consensus total.
     """)
