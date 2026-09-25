@@ -1346,26 +1346,8 @@ with tab_playbook:
     st.header("📖 The Quantitative Bettor's Playbook")
     st.write("A complete guide to finding predictive edges across the platform.")
     
-    st.markdown("""
-    ### 1. The Player Dashboard (Tab 1: Identifying Individual Form)
-    The Player Dashboard isolates an individual's current physical form from their stale, full-season statistics. The market prices props based on 162-game averages; you use this tab to exploit 14-to-30-day mechanical changes.
-    
-    * **Velocity & Spin Rate Tracking:** A pitcher whose average fastball drops by 1.5 mph over two consecutive starts is mathematically highly vulnerable to hard contact. The sportsbook will still price their outs or strikeout props based on their season average. Fade them immediately by betting their **Outs Recorded Under**.
-    * **Rolling Rates vs. Season Rates (The Slump/Surge Trap):** A batter might have a respectable 18% Strikeout Rate on the season, but a 35% rate over their last 10 games due to a swing flaw. Identify these rolling surges and bet the **Batter Over 0.5/1.5 Strikeouts** before the books adjust to the new baseline.
-    * **Batted Ball Luck (BABIP Regression):** If a hitter is batting .150 over the last week but has a 50% Hard Hit rate and elite exit velocities, they aren't actually slumping—they are hitting into bad luck. Target their **Over 1.5 Total Bases** or **Hits** props for positive regression at plus-money.
-    
-    ---
-    
-    ### 2. Team Matchups (Tab 2: Exploiting Macro Vulnerabilities)
-    The Team Matchups tab evaluates the holistic 9-man lineup and pitching staff dynamics. This is where you find structural edges that dictate Moneyline, Run Line, and Team Total bets.
-    
-    * **Bullpen Exhaustion & Leverage:** A starting pitcher might only be projected for 5.0 innings. If this tab reveals that a team's top three high-leverage relievers pitched the last two consecutive days, the back-half of the game is mathematically unprotected. Target the **Full Game Opponent Team Total Over**.
-    * **Granular Platoon Splits:** The public bets on basic Left vs. Right splits. Use this tab to dig deeper: Does a team hit LHP well overall, but struggle specifically on the road? Do they have a high wRC+ but also a massive strikeout rate against righties? Use these specific splits to find hidden value in **Team Strikeout Totals**.
-    * **Run Environment Context:** Combine team offensive profiles with park factors. A fly-ball heavy lineup playing in a warm, hitter-friendly environment presents a massive edge for **First 5 Innings Over** wagers, whereas a ground-ball heavy team neutralizes those same park factors.
-    
-    ---
-    
-    ### 3. The Matchup Simulator (Tab 3: Arsenal Matchups)
+    st.markdown("""    
+    ### The Matchup Simulator (Arsenal Matchups)
     
     Traditional sports betting markets are fundamentally reactionary. Sportsbooks set opening lines based on macro-level box scores, recent surface outcomes, and historical trends—and the general betting public wagers almost exclusively on those same narratives. 
     
@@ -1411,4 +1393,22 @@ with tab_playbook:
     * **Min Projected HH% (The "Danger Zone" Slider — Fades & Overs):**
       * *What it means:* Predicts the combined hard contact when a vulnerable pitch collides with an aggressive lineup. Instead of comparing differences, it blends the two numbers to estimate how often the ball will come off the bat at 95+ mph.
       * *How to set it:* Set a **percentage ceiling** (default is **40.0%**). MLB average hard-hit rate is around 38%. If a starter allows 44% hard contact on his sinker and the opposing lineup hits sinkers at 44% hard contact, their combined projection is **44.0%**—well into the danger zone. When this happens, you get a red **FADE PITCHER / OPPONENT OVER DETECTED** alert. Target **Opposing Team Total Over** or hitter total bases.
+
+    ---
+    
+    ### The Player Dashboard (Identifying Individual Form)
+    The Player Dashboard isolates an individual's current physical form from their stale, full-season statistics. The market prices props based on 162-game averages; you use this tab to exploit 14-to-30-day mechanical changes.
+    
+    * **Velocity & Spin Rate Tracking:** A pitcher whose average fastball drops by 1.5 mph over two consecutive starts is mathematically highly vulnerable to hard contact. The sportsbook will still price their outs or strikeout props based on their season average. Fade them immediately by betting their **Outs Recorded Under**.
+    * **Rolling Rates vs. Season Rates (The Slump/Surge Trap):** A batter might have a respectable 18% Strikeout Rate on the season, but a 35% rate over their last 10 games due to a swing flaw. Identify these rolling surges and bet the **Batter Over 0.5/1.5 Strikeouts** before the books adjust to the new baseline.
+    * **Batted Ball Luck (BABIP Regression):** If a hitter is batting .150 over the last week but has a 50% Hard Hit rate and elite exit velocities, they aren't actually slumping—they are hitting into bad luck. Target their **Over 1.5 Total Bases** or **Hits** props for positive regression at plus-money.
+    
+    ---
+    
+    ### Strikeout Prop Target (Exploiting Macro Vulnerabilities)
+    The Team Matchups tab evaluates the holistic 9-man lineup and pitching staff dynamics. This is where you find structural edges that dictate Moneyline, Run Line, and Team Total bets.
+    
+    * **Bullpen Exhaustion & Leverage:** A starting pitcher might only be projected for 5.0 innings. If this tab reveals that a team's top three high-leverage relievers pitched the last two consecutive days, the back-half of the game is mathematically unprotected. Target the **Full Game Opponent Team Total Over**.
+    * **Granular Platoon Splits:** The public bets on basic Left vs. Right splits. Use this tab to dig deeper: Does a team hit LHP well overall, but struggle specifically on the road? Do they have a high wRC+ but also a massive strikeout rate against righties? Use these specific splits to find hidden value in **Team Strikeout Totals**.
+    * **Run Environment Context:** Combine team offensive profiles with park factors. A fly-ball heavy lineup playing in a warm, hitter-friendly environment presents a massive edge for **First 5 Innings Over** wagers, whereas a ground-ball heavy team neutralizes those same park factors.
     """)
