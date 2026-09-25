@@ -190,7 +190,7 @@ def get_statcast_data(player_id, days, player_type):
     else:
         return pyb.statcast_pitcher(start_dt=start_dt, end_dt=end_dt, player_id=player_id)
 
-tab_sim, tab_player, tab_k_props, tab_playbook = st.tabs(["Matchup Simulator Hub", "Player Dashboard", "Strikeout Prop Targets", "📖 Betting Playbook"])
+tab_sim, tab_player, tab_k_props, tab_playbook = st.tabs(["Matchup Simulator Hub", "Player Form & Splits", "Strikeout Prop Targets", "📖 Betting Playbook"])
 
 # ==========================================
 # TAB: PLAYER DASHBOARD
