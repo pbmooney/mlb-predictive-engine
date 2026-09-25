@@ -249,12 +249,12 @@ if "run_query" not in st.session_state:
 if st.sidebar.button("Get Stats"):
     st.session_state.run_query = True
 
-tab1, tab2, tab3, tab4 = st.tabs(["Matchup Simulator Hub", "Player Dashboard", "Strikeout Prop Targets", "📖 Betting Playbook"])
+tab_sim, tab_player, tab_k_props, tab_playbook = st.tabs(["Matchup Simulator Hub", "Player Dashboard", "Strikeout Prop Targets", "📖 Betting Playbook"])
 
 # ==========================================
 # TAB 1: PLAYER DASHBOARD
 # ==========================================
-with tab1:
+with tab_player:
     if st.session_state.run_query:
         player_id = get_player_id(first_name, last_name)
         
@@ -789,7 +789,7 @@ with tab1:
 # ==========================================
 # TAB 2: LIVE TEAM VULNERABILITY BOARD
 # ==========================================
-with tab2:
+with tab_k_props:
     st.subheader("🎯 Team Target Finder (Statcast Engine)")
     st.write("Pull live, trailing offensive splits directly from raw MLB Statcast data to identify pitching targets.")
     
@@ -859,7 +859,7 @@ with tab2:
 # ==========================================
 # TAB 3: MATCHUP SIMULATOR HUB
 # ==========================================
-with tab3:
+with tab_sim:
     st.subheader("⚔️ Matchup Simulator Hub")
     sim_team_tab, sim_batter_tab, sim_team_matrix_tab, edge_scanner_tab = st.tabs([
         "Pitcher vs. Team (Historical)", 
@@ -1366,7 +1366,7 @@ with tab3:
 # ==========================================
 # TAB 4: THE BETTING PLAYBOOK
 # ==========================================
-with tab4:
+with tab_playbook:
     st.header("📖 The Quantitative Bettor's Playbook")
     st.write("A complete guide to finding predictive edges across the platform.")
     
