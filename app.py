@@ -166,19 +166,36 @@ def get_team_pitch_performance(team_input, start_date, end_date):
 
     return team_dict
 
-# --- ORIGINAL STABLE PLAYER ID LOOKUP ---
+# --- ENHANCED STABLE PLAYER ID LOOKUP ---
 @st.cache_data
 def get_player_id(first, last):
-    try:
-        if not first or not last:
-            return None
-        df = pyb.playerid_lookup(last, first)
-        if not df.empty:
-            return int(df['key_mlbam'].values[0])
-    except Exception:
-        pass
-    return None
+  try:
+    if not first or not last:
+      return None
 
+    # Strip accidental leading/trailing spaces
+    first = str(first).strip()
+    last = str(last).strip()
+
+    # Query pybaseball lookup
+    df = pyb.playerid_lookup(last, first)
+
+    if not df.empty:
+      # 1. Drop rows where key_mlbam is missing (historical players without modern IDs)
+      df = df.dropna(subset=['key_mlbam'])
+
+      if not df.empty:
+        # 2. Sort by the most recent season played so active players take priority
+        if 'mlb_played_last' in df.columns:
+          df = df.sort_values(by='mlb_played_last', ascending=False)
+
+        # 3. Safely extract and return the integer MLBAM ID
+        return int(df['key_mlbam'].iloc[0])
+
+  except Exception:
+    pass
+  return None
+    
 # --- DATA FETCHING FUNCTIONS ---
 @st.cache_data
 def get_statcast_data(player_id, days, player_type):
