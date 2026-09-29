@@ -1,11 +1,12 @@
-import streamlit as st
-import pandas as pd
-import pybaseball as pyb
-import matplotlib.pyplot as plt
-import seaborn as sns
-import numpy as np
 from datetime import datetime, timedelta
 import unicodedata
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import pybaseball as pyb
+import requests
+import seaborn as sns
+import streamlit as st
 
 @st.cache_data
 def get_pitcher_arsenal_stats(p_id, days):
@@ -166,33 +167,41 @@ def get_team_pitch_performance(team_input, start_date, end_date):
 
     return team_dict
 
-# --- ENHANCED STABLE PLAYER ID LOOKUP ---
+# --- BULLETPROOF PLAYER ID LOOKUP ---
 @st.cache_data
 def get_player_id(first, last):
-  st.write(f"DEBUG: Looking up first='{first}', last='{last}'")
   try:
     if not first or not last:
-      st.warning(f"DEBUG: Missing name component! first='{first}', last='{last}'")
       return None
 
-    first_clean = str(first).strip().lower()
-    last_clean = str(last).strip().lower()
+    first_clean = str(first).strip()
+    last_clean = str(last).strip()
 
-    df = pyb.playerid_lookup(last_clean, first_clean)
-    st.write("DEBUG: Lookup returned table:", df)
+    # 1. Primary: Try pybaseball
+    try:
+      df = pyb.playerid_lookup(last_clean.lower(), first_clean.lower())
+      if not df.empty:
+        if "mlb_played_last" in df.columns:
+          df = df.sort_values(by="mlb_played_last", ascending=False)
+        valid_ids = df["key_mlbam"].dropna()
+        if not valid_ids.empty:
+          return int(valid_ids.iloc[0])
+    except Exception:
+      pass
 
-    if not df.empty:
-      if "mlb_played_last" in df.columns:
-        df = df.sort_values(by="mlb_played_last", ascending=False)
-      valid_ids = df["key_mlbam"].dropna()
-      if not valid_ids.empty:
-        pid = int(valid_ids.iloc[0])
-        st.write(f"DEBUG: Found player_id = {pid}")
-        return pid
-    else:
-      st.warning("DEBUG: pybaseball returned an empty DataFrame.")
-  except Exception as e:
-    st.error(f"DEBUG: Exception raised during lookup: {e}")
+    # 2. Fallback: Official MLB Stats API
+    full_name = f"{first_clean} {last_clean}"
+    url = f"https://statsapi.mlb.com/api/v1/people/search?names={full_name}&sportIds=1"
+    res = requests.get(url, timeout=5)
+
+    if res.status_code == 200:
+      people = res.json().get("people", [])
+      if people:
+        people.sort(key=lambda p: p.get("active", False), reverse=True)
+        return int(people[0]["id"])
+
+  except Exception:
+    pass
 
   return None
     
