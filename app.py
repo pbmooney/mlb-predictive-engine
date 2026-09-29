@@ -169,31 +169,31 @@ def get_team_pitch_performance(team_input, start_date, end_date):
 # --- ENHANCED STABLE PLAYER ID LOOKUP ---
 @st.cache_data
 def get_player_id(first, last):
+  st.write(f"DEBUG: Looking up first='{first}', last='{last}'")
   try:
     if not first or not last:
+      st.warning(f"DEBUG: Missing name component! first='{first}', last='{last}'")
       return None
 
-    # Strip accidental leading/trailing spaces
-    first = str(first).strip()
-    last = str(last).strip()
+    first_clean = str(first).strip().lower()
+    last_clean = str(last).strip().lower()
 
-    # Query pybaseball lookup
-    df = pyb.playerid_lookup(last, first)
+    df = pyb.playerid_lookup(last_clean, first_clean)
+    st.write("DEBUG: Lookup returned table:", df)
 
     if not df.empty:
-      # 1. Drop rows where key_mlbam is missing (historical players without modern IDs)
-      df = df.dropna(subset=['key_mlbam'])
+      if "mlb_played_last" in df.columns:
+        df = df.sort_values(by="mlb_played_last", ascending=False)
+      valid_ids = df["key_mlbam"].dropna()
+      if not valid_ids.empty:
+        pid = int(valid_ids.iloc[0])
+        st.write(f"DEBUG: Found player_id = {pid}")
+        return pid
+    else:
+      st.warning("DEBUG: pybaseball returned an empty DataFrame.")
+  except Exception as e:
+    st.error(f"DEBUG: Exception raised during lookup: {e}")
 
-      if not df.empty:
-        # 2. Sort by the most recent season played so active players take priority
-        if 'mlb_played_last' in df.columns:
-          df = df.sort_values(by='mlb_played_last', ascending=False)
-
-        # 3. Safely extract and return the integer MLBAM ID
-        return int(df['key_mlbam'].iloc[0])
-
-  except Exception:
-    pass
   return None
     
 # --- DATA FETCHING FUNCTIONS ---
